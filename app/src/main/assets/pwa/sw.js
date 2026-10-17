@@ -1,5 +1,5 @@
-const CACHE_NAME = 'telefon-destek-pwa-v3';
-const ASSETS_TO_CACHE = [
+const CACHE_NAME = 'telefon-destek-offline-pwa-v4';
+const OFFLINE_ASSETS = [
   './',
   './index.html',
   './styles.css',
@@ -10,7 +10,7 @@ const ASSETS_TO_CACHE = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_ASSETS))
   );
   self.skipWaiting();
 });
@@ -31,19 +31,29 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
+  const req = event.request;
+  const url = new URL(req.url);
+
+  // Local Wi-Fi Sync API calls (/api/sync-calls, /api/fetch-calls, /api/test-db-connection, /api/search-customers)
+  // should always go directly to the network and never be cached by the Service Worker.
+  if (url.pathname.includes('/api/') || req.method !== 'GET') {
+    return;
+  }
+
+  // Offline-First (Cache-First with background update) strategy for all app shell assets
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request)
+    caches.match(req, { ignoreSearch: true }).then((cachedResponse) => {
+      const fetchPromise = fetch(req)
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-            const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
           }
           return networkResponse;
         })
-        .catch(() => cachedResponse);
-      return cachedResponse || fetchPromise;
+        .catch(() => null);
+
+      return cachedResponse || fetchPromise || caches.match('./index.html');
     })
   );
 });

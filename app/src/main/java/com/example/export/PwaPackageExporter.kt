@@ -130,68 +130,58 @@ object PwaPackageExporter {
             val obj = JSONObject().apply {
                 put("id", r.id)
                 put("kullaniciKodu", r.kullaniciKodu)
-                put("kullaniciAdi", r.kullaniciAdi)
-                put("baslangicTarihi", r.baslangicTarihi)
-                put("arayanTuru", r.arayanTuru)
-                put("musteriBayiAdi", r.musteriBayiAdi)
-                put("gorusulenKisi", r.gorusulenKisi)
+                put("kullanici", r.kullaniciAdi)
+                put("basTarihi", r.baslangicTarihi)
+                put("arayan", r.arayanTuru)
+                put("musteriBayi", r.musteriBayiAdi)
+                put("gorusulen", r.gorusulenKisi)
                 put("telefon", r.telefon)
                 put("telefon2", r.telefon2)
                 put("mail", r.mail)
                 put("iletisimTuru", r.iletisimTuru)
-                put("destekKonusu1", r.destekKonusu1)
-                put("sicilNo1", r.sicilNo1)
-                put("tespit1", r.tespit1)
-                put("islem1", r.islem1)
-                put("baglantiId1", r.baglantiId1)
-                put("bitisTarihi", r.bitisTarihi)
-                put("toplamSure", r.toplamSure)
-                put("kasaVersiyon1", r.kasaVersiyon1)
-                put("arkaOfisVersiyon1", r.arkaOfisVersiyon1)
-                put("redmineId1", r.redmineId1)
-                put("aktif", r.aktif)
+                put("destekKonu", r.destekKonusu1)
+                put("sicilNo", r.sicilNo1)
+                put("tespit", r.tespit1)
+                put("islem", r.islem1)
+                put("bagId", r.baglantiId1)
+                put("bitTarihi", r.bitisTarihi)
+                put("sure", r.toplamSure)
+                put("ynokcVersiyon", r.kasaVersiyon1)
+                put("arkaOfisVersiyon", r.arkaOfisVersiyon1)
+                put("redmine", r.redmineId1)
                 put("b2bKayit", r.b2bKayit)
-                put("bekleyenIs", r.bekleyenIs)
-                put("argeGidis", r.argeGidis)
-                put("argeDonus", r.argeDonus)
+                put("bekleyen", r.bekleyenIs.ifBlank { "Hayır" })
+                put("argeGidis", r.argeGidis.ifBlank { "Hayır" })
+                put("argeDonus", r.argeDonus.ifBlank { "Hayır" })
                 put("argeGidisNotu", r.argeGidisNotu)
                 put("argeDonusNotu", r.argeDonusNotu)
                 put("tckn", r.tckn)
                 put("vergiNo", r.vergiNo)
-                put("tespitKodu1", r.tespitKodu1)
-                put("islemKodu1", r.islemKodu1)
-                put("yn500SicilNo1", r.yn500SicilNo1)
-                put("dynCashVersiyon1", r.dynCashVersiyon1)
-                put("arkaOfisId1", r.arkaOfisId1)
-                put("yn500KasaVersiyon1", r.yn500KasaVersiyon1)
+                put("tespitKodu", r.tespitKodu1)
+                put("islemKodu", r.islemKodu1)
+                put("yn500SicilNo", r.yn500SicilNo1)
+                put("dynCashVersiyon", r.dynCashVersiyon1)
+                put("arkaOfisId", r.arkaOfisId1)
+                put("yn500Versiyon", r.yn500KasaVersiyon1)
                 put("servisKodu", r.servisKodu)
-                put("not1", r.not1)
+                put("isSyncedToSql", r.isSynced)
             }
             recArr.put(obj)
-        }
-
-        val tmpArr = JSONArray()
-        templates.forEach { t ->
-            tmpArr.put(JSONObject().apply {
-                put("id", t.id)
-                put("type", t.type)
-                put("text", t.text)
-            })
         }
 
         return """
             (function() {
               try {
-                if (!localStorage.getItem('td_pwa_records_v1') || JSON.parse(localStorage.getItem('td_pwa_records_v1') || '[]').length === 0) {
-                  localStorage.setItem('td_pwa_records_v1', ${JSONObject.quote(recArr.toString())});
+                var existing = JSON.parse(localStorage.getItem('telefon_destek_records_v3') || '[]');
+                if (!existing || existing.length <= 2) {
+                  localStorage.setItem('telefon_destek_records_v3', ${JSONObject.quote(recArr.toString())});
                 }
-                if (!localStorage.getItem('td_pwa_templates_v1')) {
-                  localStorage.setItem('td_pwa_templates_v1', ${JSONObject.quote(tmpArr.toString())});
-                }
-                var st = JSON.parse(localStorage.getItem('td_pwa_settings_v1') || '{}');
-                if (!st.globalKullanici) st.globalKullanici = ${JSONObject.quote(globalKullanici)};
-                if (!st.globalKullaniciKodu) st.globalKullaniciKodu = ${JSONObject.quote(globalKullaniciKodu)};
-                localStorage.setItem('td_pwa_settings_v1', JSON.stringify(st));
+                var st = JSON.parse(localStorage.getItem('telefon_destek_settings_v3') || '{}');
+                if (${JSONObject.quote(globalKullanici)}) st.globalAd = ${JSONObject.quote(globalKullanici)};
+                if (${JSONObject.quote(globalKullaniciKodu)}) st.globalKod = ${JSONObject.quote(globalKullaniciKodu)};
+                if (!st.sqlHost) st.sqlHost = '172.16.160.21';
+                if (!st.sqlPort) st.sqlPort = '8080';
+                localStorage.setItem('telefon_destek_settings_v3', JSON.stringify(st));
               } catch (e) {}
             })();
         """.trimIndent()
@@ -248,7 +238,7 @@ fun PwaPreviewWebViewDialog(
                         Icon(Icons.Default.Language, contentDescription = null, tint = iOSBlue, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Canlı GitHub PWA Önizleme (Tüm Özellikler)",
+                            text = "Canlı Offline-First PWA Önizleme (Tüm Özellikler)",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.5.sp,
                             color = Color.White
@@ -274,6 +264,7 @@ fun PwaPreviewWebViewDialog(
                             settings.domStorageEnabled = true
                             settings.allowFileAccess = true
                             settings.allowContentAccess = true
+                            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                             webChromeClient = WebChromeClient()
                             webViewClient = object : WebViewClient() {
                                 override fun onPageFinished(view: WebView?, url: String?) {
@@ -283,7 +274,7 @@ fun PwaPreviewWebViewDialog(
                                         templates = templates,
                                         globalKullanici = globalKullanici,
                                         globalKullaniciKodu = globalKullaniciKodu
-                                    ) + "\nif (typeof loadAllFromStorage === 'function') { loadAllFromStorage(); renderAllUI(); }"
+                                    ) + "\nif (typeof loadAllApplicationData === 'function') { loadAllApplicationData().then(function(){ renderAllUI(); }); }"
                                     view?.evaluateJavascript(seedJs, null)
                                 }
                             }

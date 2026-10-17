@@ -7,8 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Telefon Destek" />
-  <meta name="description" content="Telefon Destek - Çağrı Kayıt, Verimor SIP, Kronometre, İstatistik ve 36 Sütunlu Excel (.xlsx) Raporlama PWA Uygulaması" />
-  <title>Telefon Destek - Çağrı & Servis Yönetimi (PWA)</title>
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="description" content="Tamamen Offline Çalışabilen ve Yerel Depolamalı PWA Destek ve Servis Takip Uygulaması" />
+  <title>Telefon Destek — Offline Çağrı & Servis Takip PWA</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/svg+xml" href="./icon.svg" />
   <link rel="apple-touch-icon" href="./icon.svg" />
@@ -17,494 +18,596 @@
 <body>
   <div id="toastContainer" class="toast-container"></div>
 
-  <div class="app-container">
-    <!-- TOP HEADER & LIVE STOPWATCH / SIP BAR -->
-    <header class="top-header">
-      <div class="header-main-row">
-        <div class="brand-wrap">
-          <img src="./icon.svg" alt="Telefon Destek" class="brand-logo" />
-          <div class="brand-titles">
+  <div class="app-shell">
+    <!-- TOP APP BAR (ANDROID APK TOPAPPBAR Birebir Uyumlu) -->
+    <header class="topbar">
+      <div class="topbar-row">
+        <div class="brand-group">
+          <div class="brand-logo" title="Telefon Destek">🎧</div>
+          <div class="brand-text">
             <div class="brand-title">
               <span>Telefon Destek</span>
-              <span class="pwa-badge">PWA PRO</span>
+              <span id="liveCallTopBadge" class="badge badge-green" style="display:none; font-size:9px;">Canlı Çağrı</span>
+              <span id="offlineStatusBadge" class="badge badge-blue" style="font-size:9px;">⚡ Offline-First</span>
             </div>
-            <div class="brand-subtitle" id="headerRepSubtitle">Temsilci: Belirtilmemiş • Çevrimdışı Hazır</div>
+            <div class="brand-sub" id="headerRepSubtitle" onclick="openRepSwitchModal()" title="Aktif temsilciyi değiştirmek için dokunun">
+              👤 Temsilci Seçiniz • 0 Kayıt
+            </div>
           </div>
         </div>
 
-        <div class="header-status-pills">
-          <button type="button" class="status-pill" id="sipStatusPill" onclick="openModal('keypadModal')" title="Verimor SIP & Tuş Takımı">
-            <span class="status-dot" id="sipStatusDot"></span>
-            <span id="sipStatusText">SIP: Hazır (101)</span>
+        <div class="topbar-actions">
+          <button type="button" class="top-pill-btn top-pill-purple" onclick="openKnowledgeBaseModal()">
+            <span>📚</span><span>Rehber</span>
           </button>
-          <button type="button" class="status-pill" id="dutyModePill" onclick="toggleDutyMode()" title="Nöbet / Mesai Dışı Modu">
-            <span id="dutyModeIcon">🌙</span>
-            <span id="dutyModeText">Nöbet: Kapalı</span>
+          <button type="button" class="top-pill-btn top-pill-green" onclick="openDailyShiftModal()">
+            <span>📋</span><span>Gün Sonu</span>
           </button>
-          <button type="button" class="status-pill" id="installPwaBtn" style="display:none; border-color:#0A84FF; color:#60A5FA;" onclick="installPWA()">
-            <span>📲</span>
-            <span>Uygulamayı Yükle</span>
+          <button type="button" class="top-pill-btn top-pill-blue" onclick="openStatisticsModal()">
+            <span>📊</span><span>İstatistik</span>
           </button>
-        </div>
-      </div>
-
-      <!-- LIVE CALL TIMER & QUICK ACTIONS -->
-      <div class="timer-bar">
-        <div class="timer-display-box" id="timerBox">
-          <span>⏱️</span>
-          <span class="timer-clock tabular-nums" id="timerDisplay">00:00:00</span>
-          <span class="badge badge-blue" id="timerStateBadge">Beklemede</span>
-        </div>
-
-        <div class="timer-actions">
-          <button type="button" class="btn btn-sm btn-green" id="btnTimerToggle" onclick="toggleTimer()">
-            ▶️ Başlat
+          <button type="button" class="top-pill-btn top-pill-navy" onclick="openServiceManagerModal()">
+            <span>👔</span><span>Müdür</span>
           </button>
-          <button type="button" class="btn btn-sm btn-orange" onclick="finishCallTimerAndFill()">
-            ⏹️ Bitir & Süre Yaz
-          </button>
-          <button type="button" class="btn btn-sm btn-outline" onclick="resetTimer()">
-            🔄 Sıfırla
-          </button>
-          <button type="button" class="btn btn-sm btn-blue" onclick="openModal('keypadModal')">
-            🔢 Tuş Takımı / Çağrı
+          <button type="button" class="top-pill-btn top-pill-power-on" id="masterPowerBtn" onclick="toggleMasterPower()">
+            <span>⚡</span><span id="masterPowerText">ON</span>
           </button>
         </div>
       </div>
     </header>
 
-    <!-- TAB 0: ANA EKRAN (ÇAĞRI GİRİŞİ & RAPOR ARAÇLARI) -->
+    <!-- ====================================================================== -->
+    <!-- TAB 0: ANA EKRAN (ÇAĞRI GİRİŞİ & GELİŞMİŞ ALANLAR)                     -->
+    <!-- ====================================================================== -->
     <main id="tabContent0" class="tab-pane">
-      <!-- TODAY KPI STRIP -->
-      <section class="kpi-strip">
-        <div class="kpi-box">
-          <div class="kpi-label">📅 Bugün Çağrı</div>
-          <div class="kpi-val tabular-nums" id="kpiTodayTotal" style="color:#60A5FA;">0</div>
-        </div>
-        <div class="kpi-box">
-          <div class="kpi-label">✅ Çözülen</div>
-          <div class="kpi-val tabular-nums" id="kpiTodayResolved" style="color:#4ADE80;">0</div>
-        </div>
-        <div class="kpi-box">
-          <div class="kpi-label">⏳ Bekleyen İş</div>
-          <div class="kpi-val tabular-nums" id="kpiTodayPending" style="color:#FBBF24;">0</div>
-        </div>
-        <div class="kpi-box">
-          <div class="kpi-label">⏱️ Ort. Süre</div>
-          <div class="kpi-val tabular-nums" id="kpiTodayAvg" style="color:#C084FC;">00:00</div>
-        </div>
-      </section>
-
-      <!-- QUICK REPORT & MANAGEMENT TOOLS -->
-      <section class="quick-tools-grid">
-        <button type="button" class="tool-card-btn" onclick="openStatisticsModal()">
-          <div class="tool-icon" style="background:rgba(10,132,255,0.18); color:#60A5FA;">📊</div>
-          <div class="tool-meta">
-            <div class="tool-title">İstatistik & Analiz</div>
-            <div class="tool-sub">Top 5 Konu, Personel, Isı Haritası</div>
-          </div>
+      <!-- HIZLI İŞLEM ÇUBUĞU (TOOLBAR QUICK ACTIONS: EXCEL, SQL, YEDEK, SIP) -->
+      <div class="quick-toolbar">
+        <button type="button" class="qt-btn qt-excel" onclick="openExportExcelModal()">
+          <span>📊</span><span>Excel</span>
         </button>
-
-        <button type="button" class="tool-card-btn" onclick="openDailyShiftModal()">
-          <div class="tool-icon" style="background:rgba(34,197,94,0.18); color:#4ADE80;">📋</div>
-          <div class="tool-meta">
-            <div class="tool-title">Gün Sonu Raporu</div>
-            <div class="tool-sub">Vardiya Özeti & WhatsApp</div>
-          </div>
+        <button type="button" class="qt-btn qt-sql-synced" id="quickSqlSyncBtn" onclick="openWifiSyncModal()">
+          <span>☁️</span><span id="quickSqlSyncText">SQL (0)</span>
         </button>
-
-        <button type="button" class="tool-card-btn" onclick="openDeviceReportModal()">
-          <div class="tool-icon" style="background:rgba(245,158,11,0.18); color:#FBBF24;">🛠️</div>
-          <div class="tool-meta">
-            <div class="tool-title">Cihaz / Sicil Raporu</div>
-            <div class="tool-sub">Sicil Karnesi & Arıza Geçmişi</div>
-          </div>
+        <button type="button" class="qt-btn qt-backup" onclick="switchTab(3)">
+          <span>💾</span><span>Yedek</span>
         </button>
-
-        <button type="button" class="tool-card-btn" onclick="openServiceManagerModal()">
-          <div class="tool-icon" style="background:rgba(168,85,247,0.18); color:#C084FC;">👔</div>
-          <div class="tool-meta">
-            <div class="tool-title">Servis Müdürü Paneli</div>
-            <div class="tool-sub">Kritik İşler & Tekrarlayanlar</div>
-          </div>
+        <button type="button" class="qt-btn qt-sip" id="quickSipBtn" onclick="openModal('keypadModal')">
+          <span>📞</span><span id="sipStatusText">SIP: 101</span>
         </button>
+      </div>
 
-        <button type="button" class="tool-card-btn" onclick="openKnowledgeBaseModal()">
-          <div class="tool-icon" style="background:rgba(20,184,166,0.18); color:#2DD4BF;">📚</div>
-          <div class="tool-meta">
-            <div class="tool-title">Bilgi Bankası</div>
-            <div class="tool-sub">Hata Kodları & Hazır Çözüm</div>
-          </div>
-        </button>
-
-        <button type="button" class="tool-card-btn" onclick="openExportExcelModal()">
-          <div class="tool-icon" style="background:rgba(34,197,94,0.24); color:#4ADE80;">📥</div>
-          <div class="tool-meta">
-            <div class="tool-title">Excel (.xlsx) İndir</div>
-            <div class="tool-sub">36 Sütun Tam Tablo Çıktısı</div>
-          </div>
-        </button>
-      </section>
-
-      <!-- QUICK SCENARIOS (SIK KARŞILAŞILAN SENARYOLAR) -->
-      <section class="section-card">
-        <div class="section-header">
-          <div class="section-title">
-            <span>⚡ Hızlı Çözüm Senaryoları</span>
-            <span class="badge badge-blue" id="scenarioCountBadge">8 Senaryo</span>
-          </div>
-          <button type="button" class="btn btn-sm btn-outline" onclick="openScenarioModal()">
-            ➕ Senaryo Ekle
-          </button>
+      <!-- KUYRUKTA BEKLEYEN ÇAĞRI UYARI BANDI (SLIM BANNER) -->
+      <div class="waiting-banner" id="waitingCallsBanner">
+        <div id="waitingBannerText" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+          ⚠️ Bekleyen: 0 | Sıradaki: -
         </div>
-        <div class="chips-scroll-row" id="quickScenariosRow"></div>
-      </section>
-
-      <!-- AUTO-FILL CUSTOMER SUGGESTION BANNER -->
-      <div class="autofill-banner" id="autoFillBanner">
-        <div style="min-width:0; flex:1;">
-          <div style="font-size:12.5px; font-weight:800; color:#60A5FA;" id="autoFillTitle">💡 Geçmiş Kayıt Eşleşti</div>
-          <div style="font-size:11.5px; color:var(--text-secondary);" id="autoFillDesc">Müşteri ve cihaz versiyon bilgileri bulundu.</div>
-        </div>
-        <div style="display:flex; gap:6px;">
-          <button type="button" class="btn btn-sm btn-blue" onclick="applyAutoFillSuggestion()">⚡ Bilgileri Doldur</button>
-          <button type="button" class="btn btn-sm btn-outline" onclick="dismissAutoFillBanner()">✖</button>
+        <div style="display:flex; gap:4px; flex-shrink:0;">
+          <button type="button" class="btn btn-sm btn-outline" style="color:#B45309; border-color:#D97706; background:#FEF3C7;" onclick="openWaitingQueueModal()">Kuyruk</button>
+          <button type="button" class="btn btn-sm btn-orange" onclick="takeNextWaitingCall()">▶️ Al</button>
         </div>
       </div>
 
-      <!-- MAIN SUPPORT ENTRY FORM -->
-      <form id="supportForm" class="section-card" onsubmit="handleSaveRecord(event)">
-        <div class="section-header">
-          <div class="section-title">
-            <span id="formModeIcon">📝</span>
-            <span id="formModeTitle">Yeni Destek Çağrı Kaydı</span>
-            <span class="badge badge-orange" id="editingRecordBadge" style="display:none;">Düzenleme Modu</span>
-          </div>
-          <div style="display:flex; gap:6px;">
-            <button type="button" class="btn btn-sm btn-outline" onclick="lookupCustomerCandidatesManual()">
-              🔍 Müşteri Bul
-            </button>
-            <button type="button" class="btn btn-sm btn-outline" onclick="clearSupportForm()">
-              🧹 Temizle
-            </button>
+      <!-- VERIMOR GELEN ÇAĞRI VEYA AKTİF GÖRÜŞME PANELİ -->
+      <div class="active-call-banner" id="activeCallBanner">
+        <div style="display:flex; align-items:center; gap:6px; min-width:0; cursor:pointer;" onclick="openModal('keypadModal')">
+          <span id="activeCallIcon">📞</span>
+          <span id="activeCallTitle" class="tabular-nums" style="font-weight:800; font-size:11.5px; color:#93C5FD; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            Görüşmede: -
+          </span>
+        </div>
+        <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;" id="activeCallButtons">
+          <button type="button" class="btn btn-sm btn-green" id="btnAnswerSip" onclick="answerActiveSipCall()" style="display:none;">📞 Cevapla</button>
+          <button type="button" class="btn btn-sm btn-red" id="btnDeclineSip" onclick="hangupActiveSipCall()" style="display:none;">✖ Reddet</button>
+          <button type="button" class="btn btn-sm btn-outline" id="btnKeypadInCall" onclick="openModal('keypadModal')">🔢</button>
+          <button type="button" class="btn btn-sm btn-outline" id="btnMuteInCall" onclick="toggleCallMute()">🎤</button>
+          <button type="button" class="btn btn-sm btn-outline" id="btnSpeakerInCall" onclick="toggleCallSpeaker()">🔊</button>
+          <button type="button" class="btn btn-sm btn-red" id="btnHangupSip" onclick="hangupActiveSipCall()">Bitir</button>
+        </div>
+      </div>
+
+      <!-- KRONOMETRE ÇUBUĞU (STOPWATCH WIDGET) -->
+      <div class="stopwatch-bar" id="timerBox">
+        <div class="sw-left">
+          <div class="sw-dot"></div>
+          <div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span class="sw-time tabular-nums" id="timerDisplay">00:00</span>
+              <span class="sw-status" id="timerStateBadge">SÜRE</span>
+            </div>
+            <div id="timerSubInfo" style="font-size:9.5px; color:var(--text-secondary);"></div>
           </div>
         </div>
+        <div class="sw-controls">
+          <button type="button" class="btn btn-sm btn-green" id="btnTimerStartNew" onclick="startCallAndClearForm()">
+            ▶️ Yeni
+          </button>
+          <button type="button" class="btn btn-sm btn-red" id="btnTimerStop" onclick="stopCallTimer()" style="display:none;">
+            ⏸️ Durdur
+          </button>
+          <button type="button" class="btn btn-sm btn-outline" onclick="resetTimer()" title="Kronometreyi Sıfırla">
+            🔄
+          </button>
+        </div>
+      </div>
 
-        <div class="form-grid">
-          <!-- Sicil No (Prefix + Digits) -->
-          <div class="form-group">
-            <div class="field-label-row">
-              <label class="field-label">📟 Cihaz Sicil No (SICILNO1)</label>
-              <button type="button" class="btn btn-sm btn-outline" style="min-height:24px; padding:2px 7px; font-size:10.5px;" onclick="openDeviceReportForCurrentSicil()">
-                🛠️ Sicil Karnesi
-              </button>
-            </div>
-            <div class="input-with-btn">
-              <select id="fSicilPrefix" class="form-select" style="width:92px; flex-shrink:0;" onchange="syncSicilFull()">
-                <option value="PC">PC</option>
-                <option value="OKC">OKC</option>
-                <option value="YN">YN</option>
-                <option value="EN">EN</option>
-                <option value="DC">DC</option>
-                <option value="">(Boş)</option>
-              </select>
-              <input type="text" id="fSicilDigits" class="form-input" placeholder="Örn: 102458" oninput="onSicilDigitsInput(this.value)" />
+      <!-- 1. ÇAĞRI GİRİŞİ / 2. GELİŞMİŞ ALANLAR ALT SEKME ÇUBUĞU -->
+      <div class="subtab-bar-wrap">
+        <div class="subtab-bar" id="formSubTabBar">
+          <button type="button" class="subtab-btn active" id="subTabBtn0" onclick="switchFormPage(0)">
+            🎧 1. Çağrı Girişi
+          </button>
+          <button type="button" class="subtab-btn" id="subTabBtn1" onclick="switchFormPage(1)">
+            🎛️ 2. Gelişmiş Alanlar
+          </button>
+        </div>
+        <button type="button" class="icon-action-btn" onclick="openRepSwitchModal()" title="Aktif Temsilci Değiştir">
+          👤
+        </button>
+      </div>
+
+      <!-- DÜZENLEME MODU UYARI BANDI -->
+      <div id="editingRecordBanner" class="waiting-banner" style="background:rgba(245,158,11,0.15); color:#FBBF24; border-color:#F59E0B;">
+        <span id="editingRecordBannerText">✏️ Kayıt Düzenleme Modu (#0)</span>
+        <button type="button" class="btn btn-sm btn-red" onclick="clearSupportForm()">Vazgeç</button>
+      </div>
+
+      <!-- FORM ANA KAPSAYICI -->
+      <form id="supportForm" onsubmit="handleSaveRecord(event)">
+        <!-- ================================================================ -->
+        <!-- SAYFA 1: PURE SINGLE-SCREEN CALL FORM (1. ÇAĞRI GİRİŞİ)          -->
+        <!-- ================================================================ -->
+        <section class="section-card" id="formPage0">
+          <!-- 1. SİCİL NO (ÖN EK SEÇİCİ + 8 HANELİ SAYISAL GİRİŞ) -->
+          <div class="field-label-row">
+            <label class="field-label">1. SİCİL NO (ÖN EK + SERİ NO — OTOMATİK 8 HANE TAMAMLAMA)</label>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <span id="combinedSicilPreview" class="badge badge-blue tabular-nums" style="display:none;"></span>
+              <button type="button" class="btn btn-sm btn-outline" style="padding:2px 6px; font-size:10px;" onclick="promptAddPrefix()">+ Ön Ek</button>
             </div>
           </div>
-
-          <!-- Başlangıç Tarihi -->
-          <div class="form-group">
-            <div class="field-label-row">
-              <label class="field-label">🕒 Başlangıç Tarihi (BASLANGICTARIHI)</label>
-              <button type="button" class="btn btn-sm btn-outline" style="min-height:24px; padding:2px 7px; font-size:10.5px;" onclick="setStartNow()">
-                ⚡ Şimdi
-              </button>
-            </div>
-            <input type="text" id="fBasTarihi" class="form-input tabular-nums" placeholder="YYYY-MM-DD HH:mm:ss" />
-          </div>
-
-          <!-- Müşteri / Bayi Adı -->
-          <div class="form-group">
-            <div class="field-label-row">
-              <label class="field-label">🏢 Müşteri / Bayi Adı (BÜYÜK HARF)</label>
-            </div>
-            <input type="text" id="fMusteriBayi" class="form-input" placeholder="ÖRNEK MARKET A.Ş." oninput="onMusteriInput(this)" required />
-          </div>
-
-          <!-- Görüşülen Kişi -->
-          <div class="form-group">
-            <div class="field-label-row">
-              <label class="field-label">👤 Görüşülen Kişi (BÜYÜK HARF)</label>
-            </div>
-            <input type="text" id="fGorusulen" class="form-input" placeholder="AHMET YILMAZ" oninput="this.value = this.value.toLocaleUpperCase('tr-TR')" />
-          </div>
-
-          <!-- Telefon 1 -->
-          <div class="form-group">
-            <div class="field-label-row">
-              <label class="field-label">📞 Telefon 1 (TELEFON)</label>
-              <div style="display:flex; gap:4px;">
-                <button type="button" class="btn btn-sm btn-outline" style="min-height:22px; padding:1px 6px; font-size:10px;" onclick="dialPhoneField('fTelefon')">📞 Ara</button>
-                <button type="button" class="btn btn-sm btn-outline" style="min-height:22px; padding:1px 6px; font-size:10px;" onclick="whatsappPhoneField('fTelefon')">💬 WP</button>
+          <div class="form-row-sicil">
+            <select id="fSicilPrefix" class="prefix-select-btn" onchange="onSicilPrefixChange()"></select>
+            <div class="input-group" style="flex:1;">
+              <span id="sicilInlinePrefix" style="font-weight:800; color:var(--ios-blue); font-size:12px; margin-right:4px;">PC</span>
+              <input
+                type="text"
+                inputmode="numeric"
+                id="fSicilDigits"
+                class="form-input tabular-nums"
+                placeholder="Seri No (Örn: 5 -> 00000005)"
+                oninput="onSicilDigitsInput(this.value)"
+                onblur="padSicilDigitsOnBlur()"
+                onkeydown="if(event.key==='Enter'){event.preventDefault(); padSicilDigitsOnBlur(); triggerSmartLookup('SICIL', getFullSicilFromForm(), true); document.getElementById('fMusteriBayi').focus();}"
+              />
+              <div class="input-Group-actions">
+                <button type="button" class="icon-action-btn" onclick="document.getElementById('fSicilDigits').value=''; onSicilDigitsInput('');" title="Temizle">✖</button>
+                <button type="button" class="icon-action-btn" style="color:var(--ios-blue);" onclick="padSicilDigitsOnBlur(); triggerSmartLookup('SICIL', getFullSicilFromForm(), true);" title="Sicil No Ara">🔍</button>
               </div>
             </div>
-            <input type="tel" id="fTelefon" class="form-input tabular-nums" placeholder="05321234567" oninput="onPhoneInput(this)" />
           </div>
 
-          <!-- Telefon 2 -->
-          <div class="form-group">
-            <div class="field-label-row">
-              <label class="field-label">📱 Telefon 2 (TELEFON2)</label>
-              <button type="button" class="btn btn-sm btn-outline" style="min-height:22px; padding:1px 6px; font-size:10px;" onclick="dialPhoneField('fTelefon2')">📞 Ara</button>
+          <!-- 2. MÜŞTERİ / BAYİ -->
+          <div class="field-box">
+            <label class="field-label">2. MÜŞTERİ / BAYİ ADI</label>
+            <div class="input-group">
+              <span class="input-icon">🏢</span>
+              <input
+                type="text"
+                id="fMusteriBayi"
+                class="form-input"
+                placeholder="MÜŞTERİ VEYA BAYİ UNVANI..."
+                oninput="onMusteriInput(this)"
+                onkeydown="if(event.key==='Enter'){event.preventDefault(); triggerSmartLookup('MUSTERI', this.value, true); document.getElementById('fGorusulen').focus();}"
+              />
+              <div class="input-Group-actions">
+                <button type="button" class="icon-action-btn" onclick="document.getElementById('fMusteriBayi').value='';" title="Temizle">✖</button>
+                <button type="button" class="icon-action-btn" style="color:var(--ios-blue);" onclick="triggerSmartLookup('MUSTERI', document.getElementById('fMusteriBayi').value, true);" title="Firma Ara">🔍</button>
+              </div>
             </div>
-            <input type="tel" id="fTelefon2" class="form-input tabular-nums" placeholder="İkinci numara (opsiyonel)" oninput="this.value = this.value.replace(/\s+/g, '')" />
           </div>
 
-          <!-- Arayan Türü -->
-          <div class="form-group">
-            <label class="field-label">🏷️ Arayan Türü (ARAYANTURU)</label>
-            <select id="fArayan" class="form-select">
-              <option value="Müşteri">Müşteri</option>
-              <option value="Bayi">Bayi</option>
-              <option value="Yetkili Servis">Yetkili Servis</option>
-              <option value="Şube">Şube</option>
-              <option value="Merkez">Merkez</option>
-              <option value="Diğer">Diğer</option>
-            </select>
+          <!-- 3. GÖRÜŞÜLEN KİŞİ -->
+          <div class="field-box">
+            <label class="field-label">3. GÖRÜŞÜLEN KİŞİ</label>
+            <div class="input-group">
+              <span class="input-icon">👤</span>
+              <input
+                type="text"
+                id="fGorusulen"
+                class="form-input"
+                placeholder="GÖRÜŞÜLEN KİŞİ ADI SOYADI..."
+                oninput="onGorusulenInput(this)"
+                onkeydown="if(event.key==='Enter'){event.preventDefault(); triggerSmartLookup('GORUSULEN', this.value, true); document.getElementById('fTelefon').focus();}"
+              />
+              <div class="input-Group-actions">
+                <button type="button" class="icon-action-btn" onclick="document.getElementById('fGorusulen').value='';" title="Temizle">✖</button>
+                <button type="button" class="icon-action-btn" style="color:var(--ios-blue);" onclick="triggerSmartLookup('GORUSULEN', document.getElementById('fGorusulen').value, true);" title="Kişi Ara">🔍</button>
+              </div>
+            </div>
           </div>
 
-          <!-- İletişim Türü -->
-          <div class="form-group">
-            <label class="field-label">📡 İletişim Türü (ILETISIMTURU)</label>
-            <select id="fIletisimTuru" class="form-select">
-              <option value="Telefon">Telefon</option>
-              <option value="Uzak Bağlantı">Uzak Bağlantı</option>
-              <option value="WhatsApp">WhatsApp</option>
-              <option value="E-Posta">E-Posta</option>
-              <option value="Yerinde Servis">Yerinde Servis</option>
-            </select>
+          <!-- 4. TELEFON -->
+          <div class="field-box">
+            <label class="field-label">4. TELEFON</label>
+            <div class="input-group">
+              <span class="input-icon">📞</span>
+              <input
+                type="tel"
+                id="fTelefon"
+                class="form-input tabular-nums"
+                placeholder="05XX XXX XX XX"
+                oninput="onPhoneInput(this)"
+                onkeydown="if(event.key==='Enter'){event.preventDefault(); triggerSmartLookup('TELEFON', this.value, true); document.getElementById('fTespit').focus();}"
+              />
+              <div class="input-Group-actions">
+                <button type="button" class="icon-action-btn" onclick="dialPhoneField('fTelefon')" title="Telefonla Ara">📞</button>
+                <button type="button" class="icon-action-btn" style="color:#4ADE80;" onclick="whatsappPhoneField('fTelefon')" title="WhatsApp Mesaj">💬</button>
+                <button type="button" class="icon-action-btn" onclick="document.getElementById('fTelefon').value=''; updateCustomerPreviousCallsCard();" title="Temizle">✖</button>
+                <button type="button" class="icon-action-btn" style="color:var(--ios-blue);" onclick="triggerSmartLookup('TELEFON', document.getElementById('fTelefon').value, true);" title="Telefon Ara">🔍</button>
+              </div>
+            </div>
           </div>
 
-          <!-- Destek Konusu -->
-          <div class="form-group full">
-            <div class="field-label-row">
-              <label class="field-label">📌 Destek Konusu (DESTEKKONUSU1)</label>
-              <button type="button" class="btn btn-sm btn-outline" style="min-height:24px; padding:2px 8px; font-size:10.5px;" onclick="promptAddTemplate('KONU')">
-                ➕ Konu Şablonu Ekle
+          <!-- BU MÜŞTERİNİN ÖNCEKİ ÇAĞRILARI KARTI (VARSA GÖSTERİLİR) -->
+          <div class="collapse-card" id="customerPrevCallsCard" style="display:none; border-color:rgba(10,132,255,0.45);">
+            <div class="collapse-header" onclick="toggleCustomerPrevCalls()">
+              <span style="color:#60A5FA;" id="customerPrevCallsTitle">🕒 Bu Müşterinin Önceki Çağrıları (0 Kayıt)</span>
+              <span id="customerPrevCallsArrow">▼</span>
+            </div>
+            <div id="customerPrevCallsBody" style="display:none; margin-top:8px;"></div>
+          </div>
+
+          <!-- HIZLI ÇÖZÜM SENARYOLARI ÇİPLERİ -->
+          <div style="margin:6px 0;">
+            <div class="chips-scroll-row">
+              <button type="button" class="chip" style="background:#0F2942; border-color:var(--ios-blue); color:#60A5FA; font-weight:800;" onclick="openScenarioModal()">
+                ⚡ HIZLI ŞABLONLAR ➕
               </button>
+              <div id="quickScenariosRow" style="display:inline-flex; gap:5px;"></div>
             </div>
-            <input type="text" id="fDestekKonu" list="konuDatalist" class="form-input" placeholder="Destek konusu seçin veya yazın..." required />
-            <datalist id="konuDatalist"></datalist>
+          </div>
+
+          <!-- 5. DESTEK KONUSU (SEÇİMLİ + YATAY HIZLI ÇİPLER) -->
+          <div class="field-box">
+            <div class="field-label-row">
+              <label class="field-label">5. DESTEK KONUSU</label>
+              <button type="button" class="btn btn-sm btn-outline" style="padding:1px 6px; font-size:10px;" onclick="promptAddTemplate('KONU')">+ Konu Ekle</button>
+            </div>
+            <div class="input-group">
+              <span class="input-icon">📌</span>
+              <input
+                type="text"
+                id="fDestekKonu"
+                list="konuDatalist"
+                class="form-input"
+                placeholder="DESTEK KONUSU SEÇİN VEYA YAZIN..."
+                oninput="this.value = this.value.toLocaleUpperCase('tr-TR'); renderTemplatesAndPopularChips();"
+              />
+              <datalist id="konuDatalist"></datalist>
+              <div class="input-Group-actions">
+                <button type="button" class="icon-action-btn" onclick="document.getElementById('fDestekKonu').value=''; renderTemplatesAndPopularChips();" title="Temizle">✖</button>
+              </div>
+            </div>
             <div class="chips-scroll-row" id="popularKonuChips" style="margin-top:4px;"></div>
           </div>
 
-          <!-- Tespit (TESPIT1) -->
-          <div class="form-group full">
+          <!-- 6. TESPİT (ÇOKLU SEÇİMLİ ÇİPLER + SESLİ DİKTE + BÜYÜK HARF) -->
+          <div class="field-box">
             <div class="field-label-row">
-              <label class="field-label">🔍 Tespit / Arıza Tanımı (TESPIT1)</label>
-              <div style="display:flex; gap:5px;">
-                <button type="button" class="btn btn-sm btn-outline" style="min-height:24px; padding:2px 8px; font-size:10.5px;" onclick="startVoiceInput('fTespit')">
-                  🎤 Sesle Yaz
-                </button>
-                <button type="button" class="btn btn-sm btn-outline" style="min-height:24px; padding:2px 8px; font-size:10.5px;" onclick="promptAddTemplate('TESPIT')">
-                  ➕ Şablon Kaydet
-                </button>
+              <label class="field-label">6. TESPİT (ARIZA / SORUN — ÇOKLU ÇİP SEÇİMİ)</label>
+              <button type="button" class="btn btn-sm btn-outline" style="padding:1px 6px; font-size:10px;" onclick="promptAddTemplate('TESPIT')">+ Tespit Şablonu</button>
+            </div>
+            <div class="input-group">
+              <span class="input-icon">🔍</span>
+              <input
+                type="text"
+                id="fTespit"
+                class="form-input"
+                placeholder="TESPİT EDİLEN DURUM..."
+                oninput="this.value = this.value.toLocaleUpperCase('tr-TR'); renderTemplatesAndPopularChips();"
+              />
+              <div class="input-Group-actions">
+                <button type="button" class="icon-action-btn mic" onclick="startVoiceInput('fTespit')" title="Sesle Yazdır (Dikte)">🎙️</button>
+                <button type="button" class="icon-action-btn" onclick="document.getElementById('fTespit').value=''; renderTemplatesAndPopularChips();" title="Temizle">✖</button>
               </div>
             </div>
-            <textarea id="fTespit" class="form-textarea" placeholder="Tespit edilen arıza veya durumu yazın..."></textarea>
-            <div class="chips-scroll-row" id="tespitTemplateChips"></div>
+            <div class="chips-scroll-row" id="tespitTemplateChips" style="margin-top:4px;"></div>
           </div>
 
-          <!-- Yapılan İşlem (ISLEM1) -->
-          <div class="form-group full">
+          <!-- 7. İŞLEM (ÇOKLU SEÇİMLİ ÇİPLER + SESLİ DİKTE + BÜYÜK HARF) -->
+          <div class="field-box">
             <div class="field-label-row">
-              <label class="field-label">🛠️ Yapılan İşlem / Çözüm (ISLEM1)</label>
-              <div style="display:flex; gap:5px;">
-                <button type="button" class="btn btn-sm btn-outline" style="min-height:24px; padding:2px 8px; font-size:10.5px;" onclick="startVoiceInput('fIslem')">
-                  🎤 Sesle Yaz
-                </button>
-                <button type="button" class="btn btn-sm btn-outline" style="min-height:24px; padding:2px 8px; font-size:10.5px;" onclick="promptAddTemplate('ISLEM')">
-                  ➕ Şablon Kaydet
-                </button>
+              <label class="field-label">7. İŞLEM (YAPILAN MÜDAHALE / ÇÖZÜM — ÇOKLU ÇİP SEÇİMİ)</label>
+              <button type="button" class="btn btn-sm btn-outline" style="padding:1px 6px; font-size:10px;" onclick="promptAddTemplate('ISLEM')">+ İşlem Şablonu</button>
+            </div>
+            <div class="input-group">
+              <span class="input-icon">🛠️</span>
+              <input
+                type="text"
+                id="fIslem"
+                class="form-input"
+                placeholder="YAPILAN İŞLEM / ÇÖZÜM..."
+                oninput="this.value = this.value.toLocaleUpperCase('tr-TR'); renderTemplatesAndPopularChips();"
+              />
+              <div class="input-Group-actions">
+                <button type="button" class="icon-action-btn mic" onclick="startVoiceInput('fIslem')" title="Sesle Yazdır (Dikte)">🎙️</button>
+                <button type="button" class="icon-action-btn" onclick="document.getElementById('fIslem').value=''; renderTemplatesAndPopularChips();" title="Temizle">✖</button>
               </div>
             </div>
-            <textarea id="fIslem" class="form-textarea" placeholder="Uygulanan çözümü ve yapılan işlemleri yazın..."></textarea>
-            <div class="chips-scroll-row" id="islemTemplateChips"></div>
+            <div class="chips-scroll-row" id="islemTemplateChips" style="margin-top:4px;"></div>
           </div>
 
-          <!-- Bağlantı ID (AnyDesk vb.) & Redmine ID -->
-          <div class="form-group">
-            <div class="field-label-row">
-              <label class="field-label">🖥️ Bağlantı ID (AnyDesk / RustDesk)</label>
-              <button type="button" class="btn btn-sm btn-outline" style="min-height:22px; padding:1px 6px; font-size:10px;" onclick="copyFieldValue('fBagId')">📋 Kopyala</button>
+          <div style="font-size:10px; color:var(--text-secondary); margin:2px 0 6px;">
+            🎙️ <b>Sesle Dikte:</b> Tespit ve İşlem kutularındaki mikrofon simgesine dokunup konuşarak otomatik doldurabilirsiniz.
+          </div>
+
+          <!-- GÖRÜŞME İÇİ HIZLI NOT / KARALAMA DEFTERİ (LIVE SCRATCHPAD) -->
+          <div class="collapse-card" id="scratchpadCard">
+            <div class="collapse-header" onclick="toggleScratchpad()">
+              <span id="scratchpadHeaderTitle" style="color:#F59E0B;">📝 Görüşme İçi Hızlı Not (Karalama Defteri)</span>
+              <span id="scratchpadArrow">▼</span>
             </div>
-            <input type="text" id="fBagId" class="form-input tabular-nums" placeholder="Örn: 987 654 321" />
-          </div>
-
-          <div class="form-group">
-            <label class="field-label">🐞 Redmine / Talep ID (REDMINEID1)</label>
-            <input type="text" id="fRedmine" class="form-input tabular-nums" placeholder="Örn: #45892" />
-          </div>
-
-          <!-- Bitiş Tarihi & Toplam Süre -->
-          <div class="form-group">
-            <div class="field-label-row">
-              <label class="field-label">🏁 Bitiş Tarihi (BITISTARIHI)</label>
-              <button type="button" class="btn btn-sm btn-outline" style="min-height:22px; padding:1px 6px; font-size:10px;" onclick="setEndNowAndCalc()">⚡ Bitiş=Şimdi</button>
-            </div>
-            <input type="text" id="fBitTarihi" class="form-input tabular-nums" placeholder="Kaydederken otomatik" />
-          </div>
-
-          <div class="form-group">
-            <label class="field-label">⏱️ Toplam Süre (TOPLAMSURE)</label>
-            <input type="text" id="fSure" class="form-input tabular-nums" placeholder="00:04:30" />
-          </div>
-
-          <!-- Bekleyen İş Durumu -->
-          <div class="form-group">
-            <label class="field-label">⏳ Bekleyen İş Durumu (BEKLEYENIS)</label>
-            <div class="segmented-row">
-              <button type="button" id="segBekleyenHayir" class="seg-btn active-green" onclick="setBekleyenValue('Hayır')">
-                ✅ Hayır (Çözüldü)
-              </button>
-              <button type="button" id="segBekleyenEvet" class="seg-btn" onclick="setBekleyenValue('Evet')">
-                ⏳ Evet (Bekliyor)
-              </button>
-            </div>
-            <input type="hidden" id="fBekleyen" value="Hayır" />
-          </div>
-
-          <!-- Temsilci (Kullanıcı Kodu & Adı) -->
-          <div class="form-group">
-            <label class="field-label">🎧 Temsilci (KULLANICIKODU - KULLANICIADI)</label>
-            <div class="input-with-btn">
-              <input type="text" id="fKullaniciKodu" class="form-input" style="width:76px; flex-shrink:0;" placeholder="Kod" />
-              <input type="text" id="fKullanici" class="form-input" placeholder="Temsilci Adı Soyadı" />
+            <div id="scratchpadBody" style="display:none; margin-top:8px;">
+              <textarea
+                id="scratchpadInput"
+                class="form-textarea"
+                rows="2"
+                placeholder="Görüşme sırasında hızlıca not alın, hata kodu veya numara yazın..."
+                oninput="onScratchpadInput(this.value)"
+              ></textarea>
+              <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+                <button type="button" class="btn btn-sm btn-blue" onclick="appendScratchpadToField('fTespit')">🔍 Tespite Aktar</button>
+                <button type="button" class="btn btn-sm btn-green" onclick="appendScratchpadToField('fIslem')">🛠️ İşleme Aktar</button>
+                <button type="button" class="btn btn-sm btn-outline" onclick="clearScratchpad()">🗑️ Notu Temizle</button>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- GELİŞMİŞ ALANLAR (2. SAYFA: CİHAZ VERSİYONLARI, AR-GE, TCKN/VKNO, B2B) -->
-        <div style="margin-top:12px;">
-          <button type="button" class="btn btn-sm btn-outline" style="width:100%; justify-content:space-between;" onclick="toggleAdvancedFields()">
-            <span>🔧 Gelişmiş Cihaz Versiyonları, AR-GE ve SQL Alanları (36 Sütun Tam Şema)</span>
-            <span id="advToggleArrow">▼ Aç / Kapat</span>
-          </button>
+        <!-- ================================================================ -->
+        <!-- SAYFA 2: GELİŞMİŞ VE EKSTRA ALANLAR (TÜM GİZLENENLER - 36 SÜTUN) -->
+        <!-- ================================================================ -->
+        <section class="section-card" id="formPage1" style="display:none;">
+          <div class="section-header">
+            <div class="section-title">🎛️ Gelişmiş ve Ekstra Alanlar (Tüm Gizlenenler)</div>
+            <span class="badge badge-blue">36 Sütun Tam Uyumlu</span>
+          </div>
+          <p style="font-size:11px; color:var(--text-secondary); margin-bottom:10px;">
+            Bu alanlar ana ekranı sade tutmak amacıyla burada toplanmıştır. Doldurulmasa dahi Excel ve SQL çıktısına standart değerlerle aktarılır.
+          </p>
 
-          <div id="advancedFieldsContainer" style="display:block; margin-top:10px; padding-top:10px; border-top:1px solid var(--border-subtle);">
+          <!-- 1. İletişim Türü, Telefon 2, E-Posta, Bekleyen İş -->
+          <div class="collapse-card" style="margin-bottom:8px;">
+            <div class="field-label" style="margin-bottom:6px;">İLETİŞİM TÜRÜ & İKİNCİL BİLGİLER</div>
+            <div class="chips-scroll-row" style="margin-bottom:8px;" id="commTypeChipsRow">
+              <button type="button" class="chip selected-green" data-comm="Telefon" onclick="setCommType('Telefon')">📞 Telefon</button>
+              <button type="button" class="chip" data-comm="Uzak Bağlantı" onclick="setCommType('Uzak Bağlantı')">💻 Uzak Bağlantı</button>
+              <button type="button" class="chip" data-comm="E-Posta" onclick="setCommType('E-Posta')">✉️ E-Posta</button>
+              <button type="button" class="chip" data-comm="B2B" onclick="setCommType('B2B')">🌐 B2B</button>
+              <button type="button" class="chip" data-comm="Yerinde Destek" onclick="setCommType('Yerinde Destek')">🚐 Yerinde Destek</button>
+            </div>
+            <input type="hidden" id="fIletisimTuru" value="Telefon" />
+
             <div class="form-grid">
               <div class="form-group">
-                <label class="field-label">💳 YNÖKC / Kasa Versiyon (KASAVERSIYON1)</label>
-                <input type="text" id="fYnokcVersiyon" class="form-input" placeholder="Örn: v4.2.18" />
+                <label class="field-label">TELEFON 2 (İKİNCİL İLETİŞİM)</label>
+                <input type="tel" id="fTelefon2" class="form-input tabular-nums" placeholder="0212 / 05XX..." />
               </div>
               <div class="form-group">
-                <label class="field-label">💻 DynCash Versiyon (DYNCASHVERSIYON1)</label>
-                <input type="text" id="fDynCashVersiyon" class="form-input" placeholder="Örn: 2025.03.1" />
-              </div>
-              <div class="form-group">
-                <label class="field-label">📟 YN500 Kasa Versiyon (YN500KASAVERSIYON1)</label>
-                <input type="text" id="fYn500Versiyon" class="form-input" placeholder="Örn: v1.9.4" />
-              </div>
-              <div class="form-group">
-                <label class="field-label">🗄️ Arka Ofis Versiyon (ARKAOFISVERSIYON1)</label>
-                <input type="text" id="fArkaOfisVersiyon" class="form-input" placeholder="Örn: BO-3.12" />
-              </div>
-              <div class="form-group">
-                <label class="field-label">🔢 YN500 Sicil No (YN500SICILNO1)</label>
-                <input type="text" id="fYn500SicilNo" class="form-input" placeholder="YN500 Sicil No" />
-              </div>
-              <div class="form-group">
-                <label class="field-label">🆔 Arka Ofis ID (ARKAOFISID1)</label>
-                <input type="text" id="fArkaOfisId" class="form-input" placeholder="Arka Ofis Bağlantı ID" />
-              </div>
-              <div class="form-group">
-                <label class="field-label">✉️ E-Posta (MAIL)</label>
+                <label class="field-label">E-POSTA ADRESİ</label>
                 <input type="email" id="fMail" class="form-input" placeholder="musteri@firma.com" />
               </div>
               <div class="form-group">
-                <label class="field-label">📝 Servis Kodu / Not (NOT1)</label>
-                <input type="text" id="fServisKodu" class="form-input" placeholder="Ek servis notu veya kodu" />
+                <label class="field-label">ARAYAN TÜRÜ</label>
+                <select id="fArayan" class="form-select">
+                  <option value="Müşteri">Müşteri</option>
+                  <option value="Bayi">Bayi</option>
+                  <option value="Yetkili Servis">Yetkili Servis</option>
+                  <option value="Bölge Müdürlüğü">Bölge Müdürlüğü</option>
+                  <option value="Personel">Personel</option>
+                </select>
               </div>
               <div class="form-group">
-                <label class="field-label">🧪 AR-GE Gidiş (ARGEGIDIS)</label>
+                <label class="field-label">BEKLEYEN ÇAĞRI MI?</label>
+                <div style="display:flex; gap:6px;">
+                  <button type="button" id="segBekleyenHayir" class="btn btn-sm btn-green" style="flex:1;" onclick="setBekleyenValue('Hayır')">✅ Hayır (Çözüldü)</button>
+                  <button type="button" id="segBekleyenEvet" class="btn btn-sm btn-outline" style="flex:1;" onclick="setBekleyenValue('Evet')">⏳ Evet (Bekliyor)</button>
+                </div>
+                <input type="hidden" id="fBekleyen" value="Hayır" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Harici Sistem Bağlantıları (Redmine, Bağlantı ID, B2B) -->
+          <div class="collapse-card" style="margin-bottom:8px;">
+            <div class="field-label" style="margin-bottom:6px;">HARİCİ SİSTEM BAĞLANTILARI (ANYDESK / TEAMVIEWER / REDMINE)</div>
+            <div class="form-grid-3">
+              <div class="form-group">
+                <label class="field-label">REDMINE NO</label>
+                <input type="text" id="fRedmine" class="form-input" placeholder="#48210" />
+              </div>
+              <div class="form-group">
+                <label class="field-label">BAĞLANTI ID (ANYDESK)</label>
+                <input type="text" id="fBagId" class="form-input tabular-nums" placeholder="123 456 789" />
+              </div>
+              <div class="form-group">
+                <label class="field-label">B2B KAYIT NO</label>
+                <input type="text" id="fB2bKayit" class="form-input" placeholder="B2B-..." />
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Zaman Damgaları & Süre -->
+          <div class="collapse-card" style="margin-bottom:8px;">
+            <div class="field-label-row" style="margin-bottom:6px;">
+              <span class="field-label">ZAMAN DAMGALARI & SÜRE</span>
+              <div style="display:flex; gap:4px;">
+                <button type="button" class="btn btn-sm btn-outline" style="padding:2px 6px; font-size:10px;" onclick="setStartNow()">🕒 Başlangıç Şimdi</button>
+                <button type="button" class="btn btn-sm btn-outline" style="padding:2px 6px; font-size:10px;" onclick="setEndNowAndCalc()">🏁 Bitiş & Süre Hesapla</button>
+              </div>
+            </div>
+            <div class="form-grid-3">
+              <div class="form-group">
+                <label class="field-label">BAŞLANGIÇ TARİHİ</label>
+                <input type="text" id="fBasTarihi" class="form-input tabular-nums" />
+              </div>
+              <div class="form-group">
+                <label class="field-label">BİTİŞ TARİHİ</label>
+                <input type="text" id="fBitTarihi" class="form-input tabular-nums" />
+              </div>
+              <div class="form-group">
+                <label class="field-label">TOPLAM SÜRE</label>
+                <input type="text" id="fSure" class="form-input tabular-nums" placeholder="00:00" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. AR-GE Sevk ve Geri Dönüş -->
+          <div class="collapse-card" style="margin-bottom:8px;">
+            <div class="field-label" style="margin-bottom:6px;">AR-GE SEVK VE GERİ DÖNÜŞ TAKİBİ</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="field-label">AR-GE GİDİŞ</label>
                 <select id="fArgeGidis" class="form-select">
                   <option value="Hayır">Hayır</option>
                   <option value="Evet">Evet</option>
                 </select>
               </div>
               <div class="form-group">
-                <label class="field-label">🔄 AR-GE Dönüş (ARGEDONUS)</label>
+                <label class="field-label">AR-GE GİDİŞ NOTU</label>
+                <input type="text" id="fArgeGidisNotu" class="form-input" placeholder="AR-GE sevk açıklaması..." />
+              </div>
+              <div class="form-group">
+                <label class="field-label">AR-GE DÖNÜŞ</label>
                 <select id="fArgeDonus" class="form-select">
                   <option value="Hayır">Hayır</option>
                   <option value="Evet">Evet</option>
                 </select>
               </div>
               <div class="form-group">
-                <label class="field-label">📋 AR-GE Gidiş Notu</label>
-                <input type="text" id="fArgeGidisNotu" class="form-input" placeholder="AR-GE'ye iletilen detay" />
+                <label class="field-label">AR-GE DÖNÜŞ NOTU</label>
+                <input type="text" id="fArgeDonusNotu" class="form-input" placeholder="AR-GE dönüş sonucu..." />
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. Cihaz Donanım ve Versiyon Bilgileri -->
+          <div class="collapse-card">
+            <div class="field-label" style="margin-bottom:6px;">📟 CİHAZ DONANIM, VERSİYON & KURUMSAL SQL ALANLARI</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="field-label">YNOKC KASA VERSİYON</label>
+                <input type="text" id="fYnokcVersiyon" class="form-input" placeholder="v4.2.19" />
               </div>
               <div class="form-group">
-                <label class="field-label">📋 AR-GE Dönüş Notu</label>
-                <input type="text" id="fArgeDonusNotu" class="form-input" placeholder="AR-GE yanıtı" />
+                <label class="field-label">DYNCASH VERSİYON</label>
+                <input type="text" id="fDynCashVersiyon" class="form-input" placeholder="2025.03" />
               </div>
               <div class="form-group">
-                <label class="field-label">🏛️ TCKN / Vergi No</label>
-                <div class="input-with-btn">
-                  <input type="text" id="fTckn" class="form-input" placeholder="TCKN" />
-                  <input type="text" id="fVergiNo" class="form-input" placeholder="Vergi No" />
+                <label class="field-label">YN500 VERSİYON</label>
+                <input type="text" id="fYn500Versiyon" class="form-input" />
+              </div>
+              <div class="form-group">
+                <label class="field-label">ARKA OFİS VERSİYON</label>
+                <input type="text" id="fArkaOfisVersiyon" class="form-input" placeholder="BO-3.12" />
+              </div>
+              <div class="form-group">
+                <label class="field-label">SERVİS KODU / NOT1</label>
+                <input type="text" id="fServisKodu" class="form-input" />
+              </div>
+              <div class="form-group">
+                <label class="field-label">YN500 SİCİL NO</label>
+                <input type="text" id="fYn500SicilNo" class="form-input" />
+              </div>
+              <div class="form-group">
+                <label class="field-label">ARKA OFİS ID</label>
+                <input type="text" id="fArkaOfisId" class="form-input" />
+              </div>
+              <div class="form-group">
+                <label class="field-label">TCKN / VERGİ NO</label>
+                <div style="display:flex; gap:4px;">
+                  <input type="text" id="fTckn" class="form-input tabular-nums" placeholder="TCKN" />
+                  <input type="text" id="fVergiNo" class="form-input tabular-nums" placeholder="Vergi No" />
                 </div>
               </div>
               <div class="form-group">
-                <label class="field-label">🏪 B2B Kayıt & Tespit/İşlem Kodu</label>
-                <div class="input-with-btn">
-                  <input type="text" id="fB2bKayit" class="form-input" placeholder="B2B" />
-                  <input type="text" id="fTespitKodu" class="form-input" placeholder="T.Kod" />
-                  <input type="text" id="fIslemKodu" class="form-input" placeholder="İ.Kod" />
+                <label class="field-label">TESPİT / İŞLEM KODU</label>
+                <div style="display:flex; gap:4px;">
+                  <input type="text" id="fTespitKodu" class="form-input" placeholder="Tespit Kodu" />
+                  <input type="text" id="fIslemKodu" class="form-input" placeholder="İşlem Kodu" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="field-label">TEMSİLCİ KODU & ADI</label>
+                <div style="display:flex; gap:4px;">
+                  <input type="text" id="fKullaniciKodu" class="form-input" style="max-width:75px;" placeholder="Kod" />
+                  <input type="text" id="fKullanici" class="form-input" placeholder="Temsilci Adı" />
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- SUBMIT & SHARE ACTION BAR -->
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
-          <button type="submit" class="btn btn-lg btn-green" style="flex:2; min-width:180px;" id="btnSubmitRecord">
-            💾 Kaydı Veritabanına Kaydet
-          </button>
-          <button type="button" class="btn btn-lg btn-blue" style="flex:1;" onclick="shareCurrentFormWhatsApp()">
-            💬 WhatsApp
-          </button>
-          <button type="button" class="btn btn-lg btn-purple" style="flex:1;" onclick="shareCurrentFormEmail()">
-            ✉️ Outlook Mail
+        <!-- ALT AKSİYON ÇUBUĞU (TEMİZLE, WHATSAPP, KAYDET & BİTİR) -->
+        <div class="form-bottom-bar">
+          <div style="display:flex; gap:5px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-outline" onclick="clearSupportForm()">
+              🧹 Temizle
+            </button>
+            <button type="button" class="btn btn-whatsapp" onclick="shareCurrentFormWhatsApp()">
+              💬 WhatsApp
+            </button>
+            <button type="button" class="btn btn-outline" onclick="shareCurrentFormEmail()" title="E-Posta Gönder">
+              ✉️ Mail
+            </button>
+            <button type="button" class="btn btn-outline" onclick="openDeviceReportForCurrentSicil()" title="Cihaz Sicil Karnesi">
+              🛠️ Karne
+            </button>
+          </div>
+          <button type="submit" class="btn btn-green btn-lg" id="btnSubmitRecord">
+            💾 KAYDET & BİTİR
           </button>
         </div>
       </form>
     </main>
 
-    <!-- TAB 1: GEÇMİŞ KAYITLAR -->
+    <!-- ====================================================================== -->
+    <!-- TAB 1: GEÇMİŞ KAYITLAR (HISTORY VIEW)                                  -->
+    <!-- ====================================================================== -->
     <main id="tabContent1" class="tab-pane" style="display:none;">
       <section class="section-card">
         <div class="section-header">
           <div class="section-title">
-            <span>🗂️ Destek Kayıt Geçmişi</span>
+            <span>🗂️ Destek Çağrı Geçmişi</span>
             <span class="badge badge-blue" id="historyTotalBadge">0 Kayıt</span>
           </div>
-          <div style="display:flex; gap:6px;">
+          <div style="display:flex; gap:5px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-sm btn-orange" onclick="openWifiSyncModal()">
+              ☁️ Wi-Fi Sync
+            </button>
             <button type="button" class="btn btn-sm btn-green" onclick="openExportExcelModal()">
               📥 Excel (.xlsx)
+            </button>
+            <button type="button" class="btn btn-sm btn-outline" onclick="removeDuplicateRecords()">
+              🧹 Çift Kayıtları Temizle
             </button>
           </div>
         </div>
 
-        <div class="form-grid" style="margin-bottom:10px;">
-          <div class="form-group full">
-            <input type="search" id="historySearchInput" class="form-input" placeholder="🔍 Müşteri, Sicil No, Telefon, Konu, Tespit, İşlem veya Temsilci ara..." oninput="renderHistoryList()" />
-          </div>
+        <div class="field-box">
+          <input
+            type="search"
+            id="historySearchInput"
+            class="form-input"
+            placeholder="🔍 Müşteri, Sicil No, Telefon, Konu, Tespit, İşlem veya Temsilci ara..."
+            oninput="renderHistoryList()"
+          />
         </div>
 
-        <div class="chips-scroll-row" style="margin-bottom:10px;">
+        <div class="chips-scroll-row" style="margin-bottom:8px;">
           <button type="button" class="chip active" id="histFilterAll" onclick="setHistoryFilter('ALL')">📋 Tümü</button>
           <button type="button" class="chip" id="histFilterToday" onclick="setHistoryFilter('TODAY')">📅 Bugün</button>
+          <button type="button" class="chip" id="histFilterUnsynced" onclick="setHistoryFilter('UNSYNCED')">☁️ Sync Bekleyenler</button>
           <button type="button" class="chip" id="histFilterPending" onclick="setHistoryFilter('PENDING')">⏳ Bekleyen İşler</button>
           <button type="button" class="chip" id="histFilterResolved" onclick="setHistoryFilter('RESOLVED')">✅ Çözülenler</button>
           <button type="button" class="chip" id="histFilterArge" onclick="setHistoryFilter('ARGE')">🧪 AR-GE Kayıtları</button>
@@ -514,25 +617,27 @@
       </section>
     </main>
 
-    <!-- TAB 2: KAÇAN ÇAĞRILAR & ÇAĞRI GÜNLÜĞÜ -->
+    <!-- ====================================================================== -->
+    <!-- TAB 2: ARAMALAR & KAÇAN ÇAĞRILAR (MISSED CALLS VIEW)                   -->
+    <!-- ====================================================================== -->
     <main id="tabContent2" class="tab-pane" style="display:none;">
       <section class="section-card">
         <div class="section-header">
           <div class="section-title">
-            <span>📵 Kaçan Çağrılar & Santral Günlüğü</span>
-            <span class="badge badge-red" id="missedCountHeaderBadge">0 Cevapsız</span>
+            <span>📵 Aramalar & Kaçan Çağrı Günlüğü</span>
+            <span class="badge badge-red" id="missedCountHeaderBadge">0 Bekleyen</span>
           </div>
-          <div style="display:flex; gap:6px;">
-            <button type="button" class="btn btn-sm btn-blue" onclick="promptAddMissedCall()">
-              ➕ Çağrı Ekle
+          <div style="display:flex; gap:5px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-sm btn-blue" onclick="promptAddMissedCall()">➕ Çağrı Ekle</button>
+            <button type="button" class="btn btn-sm btn-outline" id="dutyModeBtn" onclick="toggleDutyMode()">
+              <span id="dutyModeIcon">🔔</span> <span id="dutyModeText">Nöbet: Aktif</span>
             </button>
-            <button type="button" class="btn btn-sm btn-outline" onclick="markAllMissedHandled()">
-              ✅ Tümünü İşlendi Yap
-            </button>
+            <button type="button" class="btn btn-sm btn-outline" onclick="markAllMissedHandled()">✅ Tümünü İşlendi Yap</button>
+            <button type="button" class="btn btn-sm btn-red" onclick="clearAllMissedCalls()">🗑️ Temizle</button>
           </div>
         </div>
 
-        <div class="chips-scroll-row" style="margin-bottom:10px;">
+        <div class="chips-scroll-row" style="margin-bottom:8px;">
           <button type="button" class="chip active" id="callFilterAll" onclick="setCallLogFilter('ALL')">📋 Tüm Çağrılar</button>
           <button type="button" class="chip" id="callFilterMissed" onclick="setCallLogFilter('MISSED')">🔴 Cevapsızlar</button>
           <button type="button" class="chip" id="callFilterUnhandled" onclick="setCallLogFilter('UNHANDLED')">⏳ Dönüş Bekleyenler</button>
@@ -544,156 +649,189 @@
       </section>
     </main>
 
-    <!-- TAB 3: AYARLAR, YEDEKLEME (ANDROID UYUMLU JSON), TEMSİLCİ & SQL -->
+    <!-- ====================================================================== -->
+    <!-- TAB 3: AYARLAR, KULLANICI TANIMLAMA, OFİS Wİ-Fİ SYNC, SIP & YEDEKLEME   -->
+    <!-- ====================================================================== -->
     <main id="tabContent3" class="tab-pane" style="display:none;">
-      <!-- 1. YEDEKLEME & GERİ YÜKLEME (ANDROID APK İLE %100 UYUMLU) -->
-      <section class="section-card">
+      <!-- 1. OFİS İÇİ Wİ-Fİ SYNC (172.16.160.21:8080) & MERKEZİ AKTARIM -->
+      <section class="section-card" style="border-color:rgba(59,130,246,0.45);">
         <div class="section-header">
           <div class="section-title">
-            <span>💾 Tam Sistem Yedekleme & Geri Yükleme (Android APK Uyumlu)</span>
+            <span>📡 1. Ofis İçi Wi-Fi Sync & SQL Sunucu (`172.16.160.21:8080`)</span>
           </div>
-          <span class="badge badge-green" id="storageSizeBadge">0 KB</span>
+          <span class="badge badge-orange" id="settingsUnsyncedBadge">0 Bekleyen Kayıt</span>
         </div>
-        <p style="font-size:12px; color:var(--text-secondary); margin-bottom:12px;">
-          Android APK uygulamasından aldığınız <b>Destek_Yedek_*.json</b> dosyasını buraya yükleyebilir veya buradaki yedeği Android telefonunuza aktarabilirsiniz.
+        <p style="font-size:11.5px; color:var(--text-secondary); margin-bottom:10px;">
+          Şirket dışında tamamen <b>Offline (İnternetsiz)</b> çalışırken kaydettiğiniz tüm çağrılar yerel hafızada (IndexedDB + localStorage) saklanır. Ofise gelip yerel Wi-Fi ağına bağlandığınızda tek tuşla <b>/api/sync-calls</b> adresine toplu aktarabilirsiniz.
         </p>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button type="button" class="btn btn-green" onclick="exportFullBackupJson()">
-            📤 Tam Yedek İndir (.json)
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="field-label">API SUNUCU IP / HOST</label>
+            <input type="text" id="setSqlHost" class="form-input tabular-nums" placeholder="172.16.160.21" value="172.16.160.21" />
+          </div>
+          <div class="form-group">
+            <label class="field-label">API PORT</label>
+            <input type="text" id="setSqlPort" class="form-input tabular-nums" placeholder="8080" value="8080" />
+          </div>
+          <div class="form-group">
+            <label class="field-label">VERİTABANI TÜRÜ</label>
+            <select id="setSqlType" class="form-select">
+              <option value="MSSQL">MS SQL Server</option>
+              <option value="MySQL">MySQL / MariaDB</option>
+              <option value="PostgreSQL">PostgreSQL</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="field-label">VERİTABANI ADI</label>
+            <input type="text" id="setSqlDb" class="form-input" placeholder="destek_db" />
+          </div>
+        </div>
+        <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-orange" onclick="syncOfflineRecordsToOfficeApi()">
+            🚀 Bekleyen Kayıtları Şimdi Gönder (/api/sync-calls)
           </button>
-          <label class="btn btn-blue" style="cursor:pointer;">
-            📥 Yedek Dosyası Yükle (.json)
-            <input type="file" id="backupFileInput" accept=".json,application/json" style="display:none;" onchange="handleBackupFileSelected(event)" />
-          </label>
-          <button type="button" class="btn btn-outline" onclick="loadSampleDemoData()">
-            ✨ Örnek Test Verisi Yükle
+          <button type="button" class="btn btn-navy" onclick="openWifiSyncModal()">
+            📥 SQL'den Veri Çek / Sync Merkezi
+          </button>
+          <button type="button" class="btn btn-outline" onclick="testSqlConnection()">
+            🔍 Bağlantıyı Test Et
+          </button>
+          <button type="button" class="btn btn-blue" onclick="saveSqlSettings()">
+            💾 Sunucu Ayarlarını Kaydet
           </button>
         </div>
       </section>
 
-      <!-- 2. TEMSİLCİ & GENEL UYGULAMA AYARLARI -->
+      <!-- 2. KULLANICI / TEMSİLCİ TANIMLAMA (KALICI & SCOPE UYUMLU) -->
       <section class="section-card">
         <div class="section-header">
-          <div class="section-title">👤 Temsilci & E-Posta Ayarları</div>
+          <div class="section-title">👤 2. Kullanıcı / Temsilci Tanımlama & E-Posta Ayarları</div>
+          <span class="badge badge-green">Kalıcı Depolama Aktif</span>
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <label class="field-label">Varsayılan Temsilci Kodu (ID)</label>
+            <label class="field-label">AKTİF TEMSİLCİ KODU (ID)</label>
             <input type="text" id="setGlobalKod" class="form-input" placeholder="Örn: 6" />
           </div>
           <div class="form-group">
-            <label class="field-label">Varsayılan Temsilci Adı Soyadı</label>
+            <label class="field-label">AKTİF TEMSİLCİ ADI SOYADI</label>
             <input type="text" id="setGlobalAd" class="form-input" placeholder="Örn: MURAT DEMİR" />
           </div>
           <div class="form-group full">
-            <label class="field-label">Outlook / Servis Alıcı E-Posta Adresi</label>
+            <label class="field-label">OUTLOOK / SERVİS ALICI E-POSTA ADRESİ</label>
             <input type="email" id="setOutlookEmail" class="form-input" placeholder="servis@enpos.com.tr" />
           </div>
         </div>
-        <div style="margin-top:10px; display:flex; justify-content:flex-end;">
-          <button type="button" class="btn btn-blue" onclick="saveGeneralSettings()">💾 Temsilci Ayarlarını Kaydet</button>
+        <div style="margin-top:8px; display:flex; justify-content:flex-end;">
+          <button type="button" class="btn btn-blue" onclick="saveGeneralSettings()">💾 Kullanıcı Ayarlarını Kalıcı Kaydet</button>
         </div>
 
-        <!-- Ek Temsilci Listesi -->
-        <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border-subtle);">
-          <div class="field-label-row" style="margin-bottom:8px;">
-            <span class="field-label">👥 Ek Temsilci Listesi (Kod ↔ İsim Eşleştirme)</span>
-            <button type="button" class="btn btn-sm btn-outline" onclick="promptAddRepresentative()">➕ Temsilci Ekle</button>
+        <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--border-subtle);">
+          <div class="field-label-row" style="margin-bottom:6px;">
+            <span class="field-label">👥 Kayıtlı Temsilci Listesi (Seçmek İçin Tıklayın)</span>
+            <button type="button" class="btn btn-sm btn-outline" onclick="promptAddRepresentative()">➕ Yeni Temsilci Ekle</button>
           </div>
           <div class="chips-scroll-row" id="repPresetsContainer"></div>
         </div>
       </section>
 
-      <!-- 3. VERIMOR BULUT SANTRAL (SIP) AYARLARI -->
+      <!-- 3. VERIMOR BULUT SANTRAL (SIP) YAPILANDIRMASI -->
       <section class="section-card">
         <div class="section-header">
-          <div class="section-title">📞 Verimor Bulut Santral (SIP) Yapılandırması</div>
+          <div class="section-title">📞 3. Verimor Bulut Santral (SIP) Ayarları</div>
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <label class="field-label">SIP Domain / Sunucu</label>
+            <label class="field-label">SIP DOMAIN / SUNUCU</label>
             <input type="text" id="setSipDomain" class="form-input" placeholder="sirketiniz.bulutsantralim.com" />
           </div>
           <div class="form-group">
-            <label class="field-label">Dahili No (Extension)</label>
-            <input type="text" id="setSipExt" class="form-input" placeholder="101" />
+            <label class="field-label">DAHİLİ NO (EXTENSION)</label>
+            <input type="text" id="setSipExt" class="form-input tabular-nums" placeholder="101" />
           </div>
           <div class="form-group">
-            <label class="field-label">SIP Şifre</label>
+            <label class="field-label">SIP ŞİFRE</label>
             <input type="password" id="setSipPass" class="form-input" placeholder="••••••••" />
           </div>
           <div class="form-group">
-            <label class="field-label">Port</label>
-            <input type="text" id="setSipPort" class="form-input" placeholder="5060" />
+            <label class="field-label">PORT</label>
+            <input type="text" id="setSipPort" class="form-input tabular-nums" placeholder="5060" />
           </div>
         </div>
-        <div style="margin-top:10px; display:flex; justify-content:flex-end; gap:8px;">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; font-size:12px;">
+          <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+            <input type="checkbox" id="setSipAutoTimer" checked /> Çağrıda Kronometreyi Otomatik Başlat
+          </label>
+          <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+            <input type="checkbox" id="setSipAutoSearch" checked /> Arayan Numarayı Veritabanında Otomatik Sorgula
+          </label>
+        </div>
+        <div style="margin-top:10px; display:flex; justify-content:flex-end; gap:6px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-orange" onclick="simulateIncomingSipCall()">🔔 Gelen Çağrı Test Et</button>
           <button type="button" class="btn btn-green" onclick="saveSipSettings()">🔌 SIP Ayarlarını Kaydet & Bağlan</button>
         </div>
       </section>
 
-      <!-- 4. UZAK SQL / API SENKRONİZASYON AYARLARI -->
+      <!-- 4. TAM SİSTEM YEDEKLEME & GERİ YÜKLEME (ANDROID APK UYUMLU JSON) -->
       <section class="section-card">
         <div class="section-header">
-          <div class="section-title">🗄️ Uzak SQL / REST API Sunucu Ayarları</div>
+          <div class="section-title">💾 4. Tam Sistem Yedekleme & Geri Yükleme (Android APK %100 Uyumlu)</div>
+          <span class="badge badge-green" id="storageSizeBadge">0 KB</span>
         </div>
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="field-label">Veritabanı Türü</label>
-            <select id="setSqlType" class="form-select">
-              <option value="MySQL">MySQL / MariaDB</option>
-              <option value="MSSQL">MS SQL Server</option>
-              <option value="PostgreSQL">PostgreSQL</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="field-label">Sunucu IP / Host</label>
-            <input type="text" id="setSqlHost" class="form-input" placeholder="192.168.1.100" />
-          </div>
-          <div class="form-group">
-            <label class="field-label">Port</label>
-            <input type="text" id="setSqlPort" class="form-input" placeholder="8080" />
-          </div>
-          <div class="form-group">
-            <label class="field-label">Veritabanı Adı</label>
-            <input type="text" id="setSqlDb" class="form-input" placeholder="destek_db" />
-          </div>
-        </div>
-        <div style="margin-top:10px; display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
-          <button type="button" class="btn btn-outline" onclick="testSqlConnection()">🔍 Bağlantıyı Test Et</button>
-          <button type="button" class="btn btn-blue" onclick="saveSqlSettings()">💾 SQL Ayarlarını Kaydet</button>
+        <p style="font-size:11.5px; color:var(--text-secondary); margin-bottom:10px;">
+          Android APK uygulamasından aldığınız <b>Destek_Yedek_*.json</b> dosyasını buraya yükleyebilir veya buradaki yedeği Android telefonunuza aktarabilirsiniz.
+        </p>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-green" onclick="exportFullBackupJson()">📤 Tam Yedek İndir (.json)</button>
+          <label class="btn btn-blue" style="cursor:pointer;">
+            📥 Yedek Dosyası Yükle (.json)
+            <input type="file" id="backupFileInput" accept=".json,application/json" style="display:none;" onchange="handleBackupFileSelected(event)" />
+          </label>
+          <button type="button" class="btn btn-outline" onclick="pasteJsonRecordsFromClipboard()">📋 Panodan JSON Yapıştır</button>
+          <button type="button" class="btn btn-outline" onclick="loadSampleDemoData()">✨ Örnek Test Verisi Yükle</button>
         </div>
       </section>
 
-      <!-- 5. VERİ TEMİZLEME -->
-      <section class="section-card" style="border-color:rgba(239,68,68,0.3);">
+      <!-- 5. TELEFON YEREL HAFIZA TEMİZLEME & TARİH ARALIĞI SİLME -->
+      <section class="section-card" style="border-color:rgba(239,68,68,0.35);">
         <div class="section-header">
-          <div class="section-title" style="color:#F87171;">⚠️ Tarih Aralığına Göre veya Tüm Kayıtları Sil</div>
+          <div class="section-title" style="color:#F87171;">🧹 5. Yerel Hafıza Yönetimi & Veri Temizleme (Arka Ofis Korunur)</div>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+          <button type="button" class="btn btn-sm btn-teal" onclick="clearSyncedLocalRecordsOnly()">
+            ☁️ SQL İle Eşitlenmiş Yerel Kayıtları Sil
+          </button>
+          <button type="button" class="btn btn-sm btn-blue" onclick="clearOldSyncedRecords(30)">
+            🗓️ 30 Günden Eski Eşitlenmişleri Sil
+          </button>
+          <button type="button" class="btn btn-sm btn-outline" onclick="removeDuplicateRecords()">
+            🧹 Mükerrer (Çift) Kayıtları Temizle
+          </button>
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <label class="field-label">Başlangıç Tarihi</label>
+            <label class="field-label">BAŞLANGIÇ TARİHİ</label>
             <input type="date" id="delStartDate" class="form-input" />
           </div>
           <div class="form-group">
-            <label class="field-label">Bitiş Tarihi</label>
+            <label class="field-label">BİTİŞ TARİHİ</label>
             <input type="date" id="delEndDate" class="form-input" />
           </div>
         </div>
-        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
           <button type="button" class="btn btn-orange" onclick="deleteRecordsByDateRange()">🗑️ Seçili Tarih Aralığını Sil</button>
-          <button type="button" class="btn btn-red" onclick="deleteAllRecordsConfirm()">🔥 Tüm Kayıtları Sıfırla</button>
+          <button type="button" class="btn btn-red" onclick="deleteAllRecordsConfirm()">🔥 Tüm Yerel Kayıtları Sıfırla</button>
         </div>
       </section>
     </main>
   </div>
 
-  <!-- BOTTOM NAVIGATION BAR -->
+  <!-- BOTTOM NAVIGATION BAR (ANDROID APK 4 SEKME) -->
   <nav class="bottom-nav">
     <div class="bottom-nav-inner">
       <button type="button" class="nav-item active" id="navBtn0" onclick="switchTab(0)">
-        <span class="nav-icon">📞</span>
-        <span>Çağrı Girişi</span>
+        <span class="nav-icon">🎧</span>
+        <span>Ana Ekran</span>
       </button>
       <button type="button" class="nav-item" id="navBtn1" onclick="switchTab(1)">
         <span class="nav-icon">🗂️</span>
@@ -701,18 +839,124 @@
         <span class="nav-badge" id="navHistoryBadge" style="display:none;">0</span>
       </button>
       <button type="button" class="nav-item" id="navBtn2" onclick="switchTab(2)">
-        <span class="nav-icon">📵</span>
-        <span>Çağrılar</span>
-        <span class="nav-badge" id="navMissedBadge" style="display:none;">0</span>
+        <span class="nav-icon">📞</span>
+        <span>Aramalar</span>
+        <span class="nav-badge red" id="navMissedBadge" style="display:none;">0</span>
       </button>
       <button type="button" class="nav-item" id="navBtn3" onclick="switchTab(3)">
         <span class="nav-icon">⚙️</span>
-        <span>Ayarlar & Yedek</span>
+        <span>Ayarlar</span>
       </button>
     </div>
   </nav>
 
-  <!-- MODAL 1: İSTATİSTİK & ANALİZ RAPORU -->
+  <!-- ======================================================================== -->
+  <!-- MODAL 0: OFİS İÇİ Wİ-Fİ SYNC (172.16.160.21:8080/api/sync-calls) MERKEZİ -->
+  <!-- ======================================================================== -->
+  <div class="modal-backdrop" id="wifiSyncModal">
+    <div class="modal-dialog" style="max-width:640px;">
+      <div class="modal-header">
+        <div class="modal-title">📡 Ofis İçi Wi-Fi Sync & SQL Veri Merkezi</div>
+        <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('wifiSyncModal')">✖ Kapat</button>
+      </div>
+      <div class="modal-body">
+        <div class="kpi-strip">
+          <div class="kpi-box">
+            <div class="kpi-label">Bekleyen (Offline)</div>
+            <div class="kpi-val" style="color:#FBBF24;" id="syncModalUnsyncedCount">0</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-label">SQL Aktarılmış</div>
+            <div class="kpi-val" style="color:#4ADE80;" id="syncModalSyncedCount">0</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-label">Toplam Yerel</div>
+            <div class="kpi-val" style="color:#60A5FA;" id="syncModalTotalCount">0</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-label">Hedef Sunucu</div>
+            <div class="kpi-val tabular-nums" style="color:#C084FC; font-size:11.5px;" id="syncModalTargetUrl">172.16.160.21:8080</div>
+          </div>
+        </div>
+
+        <!-- 1. TEK TUŞLA TOPLU AKTARIM (/api/sync-calls) -->
+        <div class="section-card" style="border-color:rgba(245,158,11,0.45);">
+          <div class="section-title" style="margin-bottom:6px;">🚀 1. Offline Biriken Kayıtları Sunucuya Gönder (`POST /api/sync-calls`)</div>
+          <p style="font-size:11.5px; color:var(--text-secondary); margin-bottom:10px;">
+            Ofis Wi-Fi ağına bağlıyken aşağıdaki butona bastığınızda, gönderilmemiş tüm offline kayıtlar <b>http://<span id="syncEndpointPreview">172.16.160.21:8080</span>/api/sync-calls</b> adresine tek tuşla aktarılır.
+          </p>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-orange btn-lg" id="btnRunWifiSyncNow" onclick="syncOfflineRecordsToOfficeApi()">
+              ☁️ Şimdi Senkronize Et (/api/sync-calls)
+            </button>
+            <button type="button" class="btn btn-outline" onclick="markAllLocalAsSynced()">
+              ✅ Tümünü Eşitlendi İşaretle
+            </button>
+            <button type="button" class="btn btn-outline" onclick="markAllLocalAsUnsynced()">
+              🔄 Tümünü Tekrar Gönderime Aç
+            </button>
+          </div>
+          <div id="wifiSyncStatusBox" style="margin-top:8px; font-size:11.5px; color:#93C5FD; display:none;"></div>
+        </div>
+
+        <!-- 2. SQL SERVER'DAN TARİH BAZLI VERİ ÇEKME (/api/fetch-calls) -->
+        <div class="section-card">
+          <div class="section-title" style="margin-bottom:6px;">📥 2. SQL Server / Arka Ofis'ten Tarih Bazlı Veri Çek (`/api/fetch-calls`)</div>
+          <div class="chips-scroll-row" style="margin-bottom:8px;">
+            <button type="button" class="chip active" onclick="setSqlFetchPreset('TODAY', this)">🟢 Sadece Bugün</button>
+            <button type="button" class="chip" onclick="setSqlFetchPreset('YESTERDAY_TODAY', this)">🔵 Dün ve Bugün</button>
+            <button type="button" class="chip" onclick="setSqlFetchPreset('THIS_WEEK', this)">🟡 Bu Hafta</button>
+            <button type="button" class="chip" onclick="setSqlFetchPreset('THIS_MONTH', this)">🟣 Bu Ay</button>
+            <button type="button" class="chip" onclick="setSqlFetchPreset('ALL', this)">⚠️ Tüm Kayıtlar</button>
+          </div>
+          <div class="form-grid-3" style="margin-bottom:8px;">
+            <div class="form-group">
+              <label class="field-label">BAŞLANGIÇ</label>
+              <input type="date" id="sqlFetchStart" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label class="field-label">BİTİŞ</label>
+              <input type="date" id="sqlFetchEnd" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label class="field-label">ÇEKİM LİMİTİ</label>
+              <select id="sqlFetchLimit" class="form-select">
+                <option value="500">500 Kayıt</option>
+                <option value="1000" selected>1000 Kayıt</option>
+                <option value="2000">2000 Kayıt</option>
+                <option value="5000">5000 Kayıt</option>
+              </select>
+            </div>
+          </div>
+          <button type="button" class="btn btn-navy" id="btnFetchFromSqlNow" onclick="fetchCallsFromOfficeSql()">
+            📥 Seçili Dönemi SQL'den İndir
+          </button>
+        </div>
+
+        <!-- 3. HIZLI IP / PORT DEĞİŞTİRME -->
+        <div class="section-card" style="margin-bottom:0;">
+          <div class="section-title" style="margin-bottom:6px;">⚙️ Hızlı API Sunucu Adresi Yapılandırması</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="field-label">SUNUCU IP / HOST</label>
+              <input type="text" id="modalSqlHost" class="form-input tabular-nums" placeholder="172.16.160.21" />
+            </div>
+            <div class="form-group">
+              <label class="field-label">PORT</label>
+              <input type="text" id="modalSqlPort" class="form-input tabular-nums" placeholder="8080" />
+            </div>
+          </div>
+          <div style="margin-top:8px; display:flex; gap:6px; justify-content:flex-end;">
+            <button type="button" class="btn btn-sm btn-outline" onclick="saveModalSqlHostPort()">💾 IP & Port Güncelle</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================== -->
+  <!-- MODAL 1: İSTATİSTİK & ANALİZ RAPORU                                      -->
+  <!-- ======================================================================== -->
   <div class="modal-backdrop" id="statsModal">
     <div class="modal-dialog">
       <div class="modal-header">
@@ -720,7 +964,7 @@
         <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('statsModal')">✖ Kapat</button>
       </div>
       <div class="modal-body">
-        <div class="chips-scroll-row" style="margin-bottom:12px;">
+        <div class="chips-scroll-row" style="margin-bottom:10px;">
           <button type="button" class="chip active" id="stRangeAll" onclick="setStatsRange('ALL')">🌐 Tüm Zamanlar</button>
           <button type="button" class="chip" id="stRangeToday" onclick="setStatsRange('TODAY')">📅 Bugün</button>
           <button type="button" class="chip" id="stRangeWeek" onclick="setStatsRange('WEEK')">📆 Son 7 Gün</button>
@@ -735,7 +979,9 @@
     </div>
   </div>
 
-  <!-- MODAL 2: GÜN SONU VARDİYA RAPORU -->
+  <!-- ======================================================================== -->
+  <!-- MODAL 2: GÜN SONU VARDİYA RAPORU                                         -->
+  <!-- ======================================================================== -->
   <div class="modal-backdrop" id="shiftModal">
     <div class="modal-dialog">
       <div class="modal-header">
@@ -743,30 +989,32 @@
         <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('shiftModal')">✖ Kapat</button>
       </div>
       <div class="modal-body">
-        <div class="form-grid" style="margin-bottom:12px;">
+        <div class="form-grid" style="margin-bottom:10px;">
           <div class="form-group">
-            <label class="field-label">Rapor Tarihi Seçiniz</label>
+            <label class="field-label">RAPOR TARİHİ SEÇİNİZ</label>
             <input type="date" id="shiftReportDate" class="form-input" onchange="renderDailyShiftReport()" />
           </div>
           <div class="form-group" style="justify-content:flex-end;">
-            <div style="display:flex; gap:6px;">
+            <div style="display:flex; gap:5px; flex-wrap:wrap;">
               <button type="button" class="btn btn-sm btn-outline" onclick="setShiftDateOffset(0)">Bugün</button>
               <button type="button" class="btn btn-sm btn-outline" onclick="setShiftDateOffset(-1)">Dün</button>
               <button type="button" class="btn btn-sm btn-outline" onclick="setShiftDateOffset(-2)">2 Gün Önce</button>
             </div>
           </div>
         </div>
-        <textarea id="shiftReportText" class="form-textarea" style="min-height:260px; font-family:monospace; font-size:12.5px;" readonly></textarea>
+        <textarea id="shiftReportText" class="form-textarea" style="min-height:240px; font-family:monospace; font-size:12px;" readonly></textarea>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-blue" onclick="copyShiftReport()">📋 Raporu Kopyala</button>
-        <button type="button" class="btn btn-green" onclick="shareShiftReportWhatsApp()">💬 WhatsApp'ta Paylaş</button>
-        <button type="button" class="btn btn-teal" onclick="exportShiftDateExcel()">📥 Günün Excel'ini İndir</button>
+        <button type="button" class="btn btn-whatsapp" onclick="shareShiftReportWhatsApp()">💬 WhatsApp'ta Paylaş</button>
+        <button type="button" class="btn btn-green" onclick="exportShiftDateExcel()">📥 Günün Excel'ini İndir</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL 3: CİHAZ / SİCİL SERVİS RAPORU -->
+  <!-- ======================================================================== -->
+  <!-- MODAL 3: CİHAZ / SİCİL SERVİS KARNESİ RAPORU                             -->
+  <!-- ======================================================================== -->
   <div class="modal-backdrop" id="deviceReportModal">
     <div class="modal-dialog">
       <div class="modal-header">
@@ -774,34 +1022,63 @@
         <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('deviceReportModal')">✖ Kapat</button>
       </div>
       <div class="modal-body">
-        <div class="input-with-btn" style="margin-bottom:12px;">
-          <input type="text" id="deviceReportSearchInput" class="form-input" placeholder="Sicil No veya Müşteri Adı girin (Örn: PC102458)..." oninput="renderDeviceServiceReport()" />
+        <div style="display:flex; gap:6px; margin-bottom:10px;">
+          <input type="text" id="deviceReportSearchInput" class="form-input" placeholder="Sicil No veya Müşteri Adı girin (Örn: PC00102458)..." oninput="renderDeviceServiceReport()" />
           <button type="button" class="btn btn-blue" onclick="renderDeviceServiceReport()">🔍 Sorgula</button>
         </div>
         <div id="deviceReportContent"></div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-blue" onclick="copyDeviceReportText()">📋 Cihaz Karnesini Kopyala</button>
-        <button type="button" class="btn btn-outline" onclick="closeModal('deviceReportModal')">Kapat</button>
+        <button type="button" class="btn btn-blue" onclick="copyDeviceReportText()">📋 Karnesini Kopyala</button>
+        <button type="button" class="btn btn-whatsapp" onclick="shareDeviceReportWhatsApp()">💬 WhatsApp</button>
+        <button type="button" class="btn btn-green" onclick="exportDeviceReportExcel()">📥 Cihaz Excel (.xlsx)</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL 4: SERVİS MÜDÜRÜ YÖNETİCİ PANELİ -->
+  <!-- ======================================================================== -->
+  <!-- MODAL 4: SERVİS MÜDÜRÜ YÖNETİCİ PANELİ (4 SEKMELİ TAM DASHBOARD)         -->
+  <!-- ======================================================================== -->
   <div class="modal-backdrop" id="serviceManagerModal">
-    <div class="modal-dialog">
+    <div class="modal-dialog" style="max-width:860px;">
       <div class="modal-header">
         <div class="modal-title">👔 Servis Müdürü & Yönetici Denetim Paneli</div>
-        <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('serviceManagerModal')">✖ Kapat</button>
+        <div style="display:flex; gap:5px;">
+          <button type="button" class="btn btn-sm btn-navy" onclick="closeModal('serviceManagerModal'); openWifiSyncModal();">☁️ SQL'den Çek</button>
+          <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('serviceManagerModal')">✖ Kapat</button>
+        </div>
       </div>
-      <div class="modal-body" id="serviceManagerContent"></div>
+      <div class="modal-body">
+        <!-- Dönem Seçici Çipler -->
+        <div class="chips-scroll-row" style="margin-bottom:8px;">
+          <button type="button" class="chip active" id="mgrPerTODAY" onclick="setManagerPeriod('TODAY')">Bugün</button>
+          <button type="button" class="chip" id="mgrPerYESTERDAY" onclick="setManagerPeriod('YESTERDAY')">Dün</button>
+          <button type="button" class="chip" id="mgrPerWEEK" onclick="setManagerPeriod('WEEK')">Son 7 Gün</button>
+          <button type="button" class="chip" id="mgrPerMONTH" onclick="setManagerPeriod('MONTH')">Bu Ay</button>
+          <button type="button" class="chip" id="mgrPerALL" onclick="setManagerPeriod('ALL')">Tümü</button>
+        </div>
+
+        <!-- Müdür Paneli 4 Alt Sekme -->
+        <div class="subtab-bar" style="grid-template-columns:repeat(4,1fr); margin-bottom:10px;">
+          <button type="button" class="subtab-btn active" id="mgrTab0" onclick="setManagerTab(0)">👥 Temsilciler</button>
+          <button type="button" class="subtab-btn" id="mgrTab1" onclick="setManagerTab(1)">📊 Grafikler</button>
+          <button type="button" class="subtab-btn" id="mgrTab2" onclick="setManagerTab(2)">📋 Çağrı Listesi</button>
+          <button type="button" class="subtab-btn" id="mgrTab3" onclick="setManagerTab(3)">📄 Rapor Önizleme</button>
+        </div>
+
+        <div id="serviceManagerContent"></div>
+      </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline" onclick="closeModal('serviceManagerModal')">Kapat</button>
+        <button type="button" class="btn btn-blue" onclick="copyManagerReportText()">📋 Yönetici Raporunu Kopyala</button>
+        <button type="button" class="btn btn-whatsapp" onclick="shareManagerReportWhatsApp()">💬 WhatsApp Paylaş</button>
+        <button type="button" class="btn btn-green" onclick="exportManagerFilteredExcel()">📥 Dönem Excel (.xlsx)</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL 5: ARIZA & HATA KODU BİLGİ BANKASI -->
+  <!-- ======================================================================== -->
+  <!-- MODAL 5: ARIZA & HATA KODU BİLGİ BANKASI                                 -->
+  <!-- ======================================================================== -->
   <div class="modal-backdrop" id="kbModal">
     <div class="modal-dialog">
       <div class="modal-header">
@@ -809,7 +1086,7 @@
         <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('kbModal')">✖ Kapat</button>
       </div>
       <div class="modal-body">
-        <div class="input-with-btn" style="margin-bottom:10px;">
+        <div style="display:flex; gap:6px; margin-bottom:10px;">
           <input type="search" id="kbSearchInput" class="form-input" placeholder="🔍 Hata kodu (ERR-304, PRN-24, POS-91) veya anahtar kelime ara..." oninput="renderKnowledgeBase()" />
           <button type="button" class="btn btn-sm btn-blue" onclick="promptAddKnowledgeArticle()">➕ Makale Ekle</button>
         </div>
@@ -821,7 +1098,9 @@
     </div>
   </div>
 
-  <!-- MODAL 6: EXCEL (.XLSX) RAPOR İNDİRME -->
+  <!-- ======================================================================== -->
+  <!-- MODAL 6: 36 SÜTUNLU EXCEL (.XLSX) RAPOR İNDİRME                          -->
+  <!-- ======================================================================== -->
   <div class="modal-backdrop" id="exportExcelModal">
     <div class="modal-dialog" style="max-width:520px;">
       <div class="modal-header">
@@ -829,22 +1108,23 @@
         <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('exportExcelModal')">✖ Kapat</button>
       </div>
       <div class="modal-body">
-        <p style="font-size:12.5px; color:var(--text-secondary); margin-bottom:12px;">
-          Seçilen tarih aralığındaki destek kayıtları, kurumsal veritabanı şemasına birebir uyumlu <b>36 sütunlu gerçek Microsoft Excel (.xlsx)</b> dosyası olarak indirilir.
+        <p style="font-size:12px; color:var(--text-secondary); margin-bottom:10px;">
+          Seçilen tarih aralığındaki destek kayıtları, kurumsal veritabanı şemasına birebir uyumlu <b>36 sütunlu gerçek Microsoft Excel (.xlsx)</b> dosyası olarak tamamen offline üretilir.
         </p>
-        <div class="chips-scroll-row" style="margin-bottom:12px;">
+        <div class="chips-scroll-row" style="margin-bottom:10px;">
           <button type="button" class="chip" onclick="setExportRangePreset(0)">📅 Bugün</button>
+          <button type="button" class="chip" onclick="setExportRangePreset(1)">📅 Dün & Bugün</button>
           <button type="button" class="chip" onclick="setExportRangePreset(7)">📆 Son 7 Gün</button>
           <button type="button" class="chip" onclick="setExportRangePreset(30)">🗓️ Son 30 Gün</button>
           <button type="button" class="chip" onclick="setExportRangePreset(3650)">🌐 Tüm Kayıtlar</button>
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <label class="field-label">Başlangıç Tarihi</label>
+            <label class="field-label">BAŞLANGIÇ TARİHİ</label>
             <input type="date" id="exportStartDate" class="form-input" />
           </div>
           <div class="form-group">
-            <label class="field-label">Bitiş Tarihi</label>
+            <label class="field-label">BİTİŞ TARİHİ</label>
             <input type="date" id="exportEndDate" class="form-input" />
           </div>
         </div>
@@ -857,15 +1137,17 @@
     </div>
   </div>
 
-  <!-- MODAL 7: TUŞ TAKIMI & SANTRAL ÇAĞRI KONTROL -->
+  <!-- ======================================================================== -->
+  <!-- MODAL 7: VERIMOR SIP TUŞ TAKIMI & ÇAĞRI KONTROLÜ                         -->
+  <!-- ======================================================================== -->
   <div class="modal-backdrop" id="keypadModal">
     <div class="modal-dialog" style="max-width:420px;">
       <div class="modal-header">
-        <div class="modal-title">🔢 Verimor SIP & Çağrı Tuş Takımı</div>
+        <div class="modal-title">🔢 Verimor SIP & Santral Çağrı Kontrolü</div>
         <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('keypadModal')">✖ Kapat</button>
       </div>
       <div class="modal-body" style="text-align:center;">
-        <input type="tel" id="keypadDisplayInput" class="form-input tabular-nums" style="font-size:22px; font-weight:800; text-align:center; margin-bottom:8px;" placeholder="Numara çevirin..." />
+        <input type="tel" id="keypadDisplayInput" class="form-input tabular-nums" style="font-size:21px; font-weight:800; text-align:center; margin-bottom:8px;" placeholder="Numara veya Dahili (*2202)..." />
         <div class="keypad-grid">
           <button type="button" class="keypad-btn" onclick="pressKeypad('1')">1<span>OO</span></button>
           <button type="button" class="keypad-btn" onclick="pressKeypad('2')">2<span>ABC</span></button>
@@ -876,64 +1158,112 @@
           <button type="button" class="keypad-btn" onclick="pressKeypad('7')">7<span>PQRS</span></button>
           <button type="button" class="keypad-btn" onclick="pressKeypad('8')">8<span>TUV</span></button>
           <button type="button" class="keypad-btn" onclick="pressKeypad('9')">9<span>WXYZ</span></button>
-          <button type="button" class="keypad-btn" onclick="pressKeypad('*')">*<span></span></button>
+          <button type="button" class="keypad-btn" onclick="pressKeypad('*')">*<span>AKTAR</span></button>
           <button type="button" class="keypad-btn" onclick="pressKeypad('0')">0<span>+</span></button>
-          <button type="button" class="keypad-btn" onclick="pressKeypad('#')">#<span></span></button>
+          <button type="button" class="keypad-btn" onclick="pressKeypad('#')">#<span>KARE</span></button>
         </div>
-        <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
-          <button type="button" class="btn btn-green btn-lg" onclick="startCallFromKeypad()">📞 Çağrı Başlat & Forma Aktar</button>
+        <div style="display:flex; gap:6px; justify-content:center; margin-top:8px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-green" onclick="startCallFromKeypad()">📞 Çağrı Başlat & Forma Al</button>
           <button type="button" class="btn btn-orange" onclick="simulateIncomingSipCall()">🔔 Gelen Çağrı Simüle Et</button>
-          <button type="button" class="btn btn-outline" onclick="document.getElementById('keypadDisplayInput').value=''">⌫ Sil</button>
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('keypadDisplayInput').value=''">⌫ Temizle</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- MODAL 8: HIZLI SENARYO EKLEME -->
+  <!-- ======================================================================== -->
+  <!-- MODAL 8: HIZLI SENARYO EKLEME & DÜZENLEME                                -->
+  <!-- ======================================================================== -->
   <div class="modal-backdrop" id="scenarioModal">
     <div class="modal-dialog" style="max-width:480px;">
       <div class="modal-header">
-        <div class="modal-title">⚡ Yeni Hızlı Çözüm Senaryosu Ekle</div>
+        <div class="modal-title">⚡ Yeni Hızlı Çözüm Şablonu Ekle</div>
         <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('scenarioModal')">✖ Kapat</button>
       </div>
       <div class="modal-body">
         <div class="form-grid">
           <div class="form-group">
-            <label class="field-label">İkon (Emoji)</label>
+            <label class="field-label">İKON (EMOJİ)</label>
             <input type="text" id="scIcon" class="form-input" value="⚡" />
           </div>
           <div class="form-group">
-            <label class="field-label">Kısa Başlık</label>
-            <input type="text" id="scTitle" class="form-input" placeholder="Örn: E-Arşiv Hatası" />
+            <label class="field-label">KISA BAŞLIK</label>
+            <input type="text" id="scTitle" class="form-input" placeholder="Örn: Z Raporu Hatası" />
           </div>
           <div class="form-group full">
-            <label class="field-label">Destek Konusu</label>
-            <input type="text" id="scKonu" class="form-input" placeholder="E-Arşiv / E-Fatura Entegrasyonu" />
+            <label class="field-label">DESTEK KONUSU</label>
+            <input type="text" id="scKonu" class="form-input" placeholder="GÜN SONU / Z RAPORU HATASI" />
           </div>
           <div class="form-group full">
-            <label class="field-label">Hazır Tespit Metni</label>
-            <textarea id="scTespit" class="form-textarea"></textarea>
+            <label class="field-label">HAZIR TESPİT METNİ</label>
+            <textarea id="scTespit" class="form-textarea" rows="2"></textarea>
           </div>
           <div class="form-group full">
-            <label class="field-label">Hazır İşlem / Çözüm Metni</label>
-            <textarea id="scIslem" class="form-textarea"></textarea>
+            <label class="field-label">HAZIR İŞLEM / ÇÖZÜM METNİ</label>
+            <textarea id="scIslem" class="form-textarea" rows="2"></textarea>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-green" onclick="saveNewQuickScenario()">💾 Senaryoyu Kaydet</button>
+        <button type="button" class="btn btn-green" onclick="saveNewQuickScenario()">💾 Şablonu Kaydet</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL 9: MÜŞTERİ / CİHAZ EŞLEŞME SEÇİCİ -->
+  <!-- ======================================================================== -->
+  <!-- MODAL 9: MÜŞTERİ / CİHAZ EŞLEŞME SEÇİCİ (KULLANICI ONAYLI)               -->
+  <!-- ======================================================================== -->
   <div class="modal-backdrop" id="candidatePickerModal">
     <div class="modal-dialog" style="max-width:560px;">
       <div class="modal-header">
-        <div class="modal-title">🔍 Eşleşen Müşteri / Cihaz Kayıtları</div>
+        <div class="modal-title" id="candidateModalTitle">🔍 Eşleşen Müşteri / Cihaz Kayıtları (Onayınız Bekleniyor)</div>
         <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('candidatePickerModal')">✖ Kapat</button>
       </div>
       <div class="modal-body" id="candidatePickerList"></div>
+    </div>
+  </div>
+
+  <!-- ======================================================================== -->
+  <!-- MODAL 10: KUYRUKTA BEKLEYEN ÇAĞRILAR HAVUZU                              -->
+  <!-- ======================================================================== -->
+  <div class="modal-backdrop" id="waitingQueueModal">
+    <div class="modal-dialog" style="max-width:500px;">
+      <div class="modal-header">
+        <div class="modal-title">⏳ Kuyrukta Bekleyen Çağrılar Havuzu</div>
+        <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('waitingQueueModal')">✖ Kapat</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:11.5px; color:var(--text-secondary); margin-bottom:10px;">
+          🛡️ <b>Form Koruma Aktif:</b> Siz mevcut form kaydını <b>KAYDET & BİTİR</b> ile tamamlayana kadar yeni gelen çağrılar mevcut yazılarınızı silmez, bu havuzda güvenle bekler.
+        </p>
+        <div id="waitingQueueListContainer"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-red btn-sm" onclick="clearWaitingQueue()">🗑️ Tüm Kuyruğu Temizle</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('waitingQueueModal')">Kapat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================== -->
+  <!-- MODAL 11: HIZLI KULLANICI / TEMSİLCİ SEÇİCİ                              -->
+  <!-- ======================================================================== -->
+  <div class="modal-backdrop" id="repSwitchModal">
+    <div class="modal-dialog" style="max-width:440px;">
+      <div class="modal-header">
+        <div class="modal-title">👤 Aktif Kullanıcı / Temsilci Seçimi</div>
+        <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('repSwitchModal')">✖ Kapat</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:11.5px; color:var(--text-secondary); margin-bottom:10px;">
+          Seçtiğiniz temsilci bilgisi hem tarayıcıda hem de PWA ana ekran kısayolunda (IndexedDB + localStorage) kalıcı olarak saklanır.
+        </p>
+        <div id="repSwitchListContainer" style="display:flex; flex-direction:column; gap:6px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-blue btn-sm" onclick="promptAddRepresentative()">➕ Yeni Temsilci Ekle</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('repSwitchModal')">Kapat</button>
+      </div>
     </div>
   </div>
 
