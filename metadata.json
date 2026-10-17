@@ -1,6 +1,6 @@
 {
-  "name": "Destek Kayıt & Excel",
-  "description": "Telefon destek çağrılarını form ile kaydeden, kronometre ile süre hesaplayan ve tarih aralığına göre Excel (.xlsx) raporu oluşturan destek yönetim uygulaması.",
+  "name": "Telefon Destek",
+  "description": "Telefon Destek - Çağrıları form ile kaydeden, Verimor SIP bağlantısı ve kronometre ile süre hesaplayan, tarih aralığına göre Excel (.xlsx) raporu oluşturan destek yönetim uygulaması.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

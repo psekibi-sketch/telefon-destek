@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.supportlogger.qfvr"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 3
+    versionName = "1.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -61,6 +61,43 @@ android {
     includeInApk = false
     includeInBundle = true
   }
+}
+
+abstract class RenameApkTask : DefaultTask() {
+  @get:InputDirectory
+  abstract val apkDir: DirectoryProperty
+
+  @TaskAction
+  fun rename() {
+    val dir = apkDir.get().asFile
+    dir.walkTopDown().filter { it.isFile && it.extension == "apk" }.forEach { file ->
+      val target = File(file.parentFile, "telefondestek.apk")
+      if (file.name != "telefondestek.apk") {
+        file.copyTo(target, overwrite = true)
+      }
+      val appDebug = File(file.parentFile, "app-debug.apk")
+      if (file.name != "app-debug.apk") {
+        file.copyTo(appDebug, overwrite = true)
+      }
+    }
+  }
+}
+
+val renameApk = tasks.register<RenameApkTask>("renameApk") {
+  apkDir.set(layout.buildDirectory.dir("outputs/apk"))
+}
+
+val syncPwaAssets = tasks.register<Copy>("syncPwaAssets") {
+  from("${rootDir}/docs")
+  into("${projectDir}/src/main/assets/pwa")
+}
+
+tasks.named("preBuild") {
+  dependsOn(syncPwaAssets)
+}
+
+tasks.matching { it.name.startsWith("assemble") }.configureEach {
+  finalizedBy(renameApk)
 }
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files

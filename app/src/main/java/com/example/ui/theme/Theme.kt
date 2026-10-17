@@ -13,46 +13,52 @@ import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme =
   darkColorScheme(
-    primary = ExcelGreen,
+    primary = iOSBlue,
     onPrimary = Color.White,
-    secondary = AccentBlue,
-    tertiary = AccentOrange,
-    background = Slate900,
-    surface = Slate800,
-    onSurface = Color.White,
-    surfaceVariant = Slate700
+    secondary = iOSBlue,
+    onSecondary = Color.White,
+    tertiary = iOSOrange,
+    onTertiary = Color.White,
+    background = iOSBackground,
+    surface = iOSCard,
+    onSurface = iOSTextPrimary,
+    surfaceVariant = iOSCardSecondary,
+    onSurfaceVariant = iOSTextSecondary,
+    surfaceContainer = iOSCard,
+    surfaceContainerHigh = iOSCardSecondary,
+    surfaceContainerHighest = iOSCardSecondary,
+    surfaceContainerLow = iOSCard,
+    surfaceContainerLowest = iOSBackground,
+    outline = iOSBorder,
+    outlineVariant = iOSCardTertiary
   )
 
 private val LightColorScheme =
   lightColorScheme(
-    primary = ExcelGreen,
+    primary = iOSBlue,
     onPrimary = Color.White,
-    secondary = AccentBlue,
-    tertiary = AccentOrange,
-    background = Slate50,
-    surface = Color.White,
-    onSurface = Slate900,
-    surfaceVariant = Slate100,
-    outline = Slate200
+    secondary = iOSBlue,
+    tertiary = iOSOrange,
+    background = iOSBackground,
+    surface = iOSCard,
+    onSurface = iOSTextPrimary,
+    surfaceVariant = iOSCardSecondary,
+    onSurfaceVariant = iOSTextSecondary,
+    surfaceContainer = iOSCard,
+    surfaceContainerHigh = iOSCardSecondary,
+    surfaceContainerHighest = iOSCardSecondary,
+    surfaceContainerLow = iOSCard,
+    surfaceContainerLowest = iOSBackground,
+    outline = iOSBorder
   )
 
 @Composable
 fun MyApplicationTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
+  darkTheme: Boolean = true, // Default to iOS dark mode as requested in requirement 2
+  dynamicColor: Boolean = false, // Keep consistent iOS theme across devices
   content: @Composable () -> Unit,
 ) {
-  val colorScheme =
-    when {
-      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-      }
-
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
-    }
+  val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
   MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }

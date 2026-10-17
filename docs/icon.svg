@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B1528"/>
+      <stop offset="50%" stop-color="#0F2547"/>
+      <stop offset="100%" stop-color="#090D16"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A84FF"/>
+      <stop offset="100%" stop-color="#30D158"/>
+    </linearGradient>
+    <linearGradient id="phoneGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#0A84FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bgGrad)"/>
+  <rect x="18" y="18" width="476" height="476" rx="102" fill="none" stroke="#0A84FF" stroke-width="4" stroke-opacity="0.35"/>
+  <!-- Headset Arch -->
+  <path d="M128 264 C128 166 185 104 256 104 C327 104 384 166 384 264" fill="none" stroke="url(#accentGrad)" stroke-width="26" stroke-linecap="round"/>
+  <!-- Left & Right Ear Cups -->
+  <rect x="96" y="236" width="48" height="96" rx="24" fill="#0A84FF"/>
+  <rect x="368" y="236" width="48" height="96" rx="24" fill="#30D158"/>
+  <!-- Mic Boom -->
+  <path d="M388 320 C388 378 332 406 272 406" fill="none" stroke="#30D158" stroke-width="16" stroke-linecap="round"/>
+  <rect x="234" y="390" width="52" height="30" rx="15" fill="#30D158"/>
+  <!-- Center Support Phone / Pulse Icon -->
+  <circle cx="256" cy="256" r="82" fill="#132238" stroke="#0A84FF" stroke-width="4" stroke-opacity="0.5"/>
+  <path d="M214 260 L238 260 L250 226 L268 290 L282 252 L302 252" fill="none" stroke="url(#phoneGrad)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

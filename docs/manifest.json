@@ -1,0 +1,45 @@
+{
+  "name": "Telefon Destek - Çağrı & Servis Yönetimi",
+  "short_name": "Telefon Destek",
+  "description": "Çağrıları form ile kaydeden, Verimor SIP bağlantısı ve kronometre ile süre hesaplayan, tarih aralığına göre Excel (.xlsx) raporu ve istatistik oluşturan destek yönetim PWA uygulaması.",
+  "lang": "tr-TR",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#090D16",
+  "theme_color": "#0A84FF",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Yeni Çağrı Kaydı",
+      "short_name": "Yeni Kayıt",
+      "description": "Hemen yeni destek çağrı kaydı başlat",
+      "url": "./index.html?tab=0",
+      "icons": [{ "src": "./icon.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Gün Sonu Raporu",
+      "short_name": "Gün Sonu",
+      "description": "Gün sonu vardiya raporunu görüntüle",
+      "url": "./index.html?modal=shift",
+      "icons": [{ "src": "./icon.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "İstatistikler",
+      "short_name": "Analiz",
+      "description": "Destek istatistiklerini ve grafikleri aç",
+      "url": "./index.html?modal=stats",
+      "icons": [{ "src": "./icon.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+    }
+  ]
+}

@@ -38,10 +38,10 @@ class GreetingScreenshotTest {
 
   @Test
   fun testExcelColumnsCount() {
-    assertEquals(21, SupportRecord.EXCEL_COLUMNS.size)
-    val sample = SupportRecord(redmine = "RM-101", musteriBayi = "Test A.Ş.")
+    assertEquals(36, SupportRecord.EXCEL_COLUMNS.size)
+    val sample = SupportRecord(redmineId1 = "RM-101", musteriBayiAdi = "Test A.Ş.")
     val values = sample.toExcelRowValues()
-    assertEquals(21, values.size)
+    assertEquals(36, values.size)
 
     val baos = ByteArrayOutputStream()
     ExcelExporter.writeXlsx(baos, listOf(sample))

@@ -142,30 +142,45 @@ object ExcelExporter {
         sb.append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""")
         sb.append("""<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">""")
 
-        // Column widths for 21 columns
+        // Column widths for 36 columns
         sb.append("<cols>")
         val colWidths = listOf(
-            12, // 1 REDMINE
-            20, // 2 BAŞ.TARİHİ
-            14, // 3 SİCİL NO
-            16, // 4 KULLANICI
-            18, // 5 ARAYAN
-            22, // 6 MÜŞTERİ/BAYİ
-            18, // 7 GÖRÜŞÜLEN
-            16, // 8 TELEFON
-            15, // 9 İLETİŞİM TÜRÜ
-            24, // 10 DESTEK KONU
-            28, // 11 TESPİT-1
-            28, // 12 İŞLEM-1
-            16, // 13 BAĞ.ID-1
-            20, // 14 BİT.TARİHİ
-            12, // 15 SÜRE
-            14, // 16 BEKLEYEN
-            14, // 17 B2B KAYIT
-            14, // 18 ARGE GİDİŞ
-            24, // 19 ARGE GİDİŞ NOTU
-            14, // 20 ARGE DÖNÜŞ
-            24  // 21 ARGE DÖNÜŞ NOTU
+            16, // 1 KULLANICIKODU
+            20, // 2 BASLANGICTARIHI
+            14, // 3 ARAYANTURU
+            24, // 4 MUSTERIBAYIADI
+            20, // 5 GORUSULENKISI
+            16, // 6 TELEFON
+            16, // 7 TELEFON2
+            22, // 8 MAIL
+            16, // 9 ILETISIMTURU
+            22, // 10 DESTEKKONUSU1
+            16, // 11 SICILNO1
+            28, // 12 TESPIT1
+            28, // 13 ISLEM1
+            16, // 14 BAGLANTIID1
+            20, // 15 BITISTARIHI
+            14, // 16 TOPLAMSURE
+            16, // 17 KASAVERSIYON1
+            16, // 18 ARKAOFISVERSIYON1
+            14, // 19 REDMINEID1
+            10, // 20 AKTIF
+            14, // 21 B2BKAYIT
+            14, // 22 BEKLEYENIS
+            14, // 23 ARGEGIDIS
+            14, // 24 ARGEDONUS
+            24, // 25 ARGEGIDISNOTU
+            24, // 26 ARGEDONUSNOTU
+            16, // 27 RESIM
+            16, // 28 TCKN
+            16, // 29 VERGINO
+            16, // 30 TESPITKODU1
+            16, // 31 ISLEMKODU1
+            16, // 32 YN500SICILNO1
+            18, // 33 DYNCASHVERSIYON1
+            16, // 34 ARKAOFISID1
+            18, // 35 YN500KASAVERSIYON1
+            20  // 36 NOT1
         )
 
         for (i in columns.indices) {
@@ -298,6 +313,47 @@ object ExcelExporter {
             context.startActivity(viewIntent)
         } catch (e: Exception) {
             shareExcelFile(context, file)
+        }
+    }
+
+    /**
+     * Sends the Excel report directly to Outlook (or default email) with predefined recipient and subject.
+     */
+    fun shareExcelViaOutlookOrEmail(context: Context, file: File, recipientEmail: String) {
+        val authority = "${context.packageName}.fileprovider"
+        val contentUri: Uri = FileProvider.getUriForFile(context, authority, file)
+        val toEmail = recipientEmail.trim().ifBlank { "servis@enpos.com.tr" }
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            putExtra(Intent.EXTRA_EMAIL, arrayOf(toEmail))
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            putExtra(Intent.EXTRA_SUBJECT, "Telefon Destek Excel Raporu - ${file.name}")
+            putExtra(
+                Intent.EXTRA_TEXT,
+                "Sayın İlgili,\n\nTelefon Destek sistemi üzerinden oluşturulan çağrı kayıtları Excel raporu ekte bilginize sunulmuştur.\n\nİyi çalışmalar dileriz."
+            )
+            setPackage("com.microsoft.office.outlook")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        try {
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            val fallback = Intent(Intent.ACTION_SEND).apply {
+                type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                putExtra(Intent.EXTRA_EMAIL, arrayOf(toEmail))
+                putExtra(Intent.EXTRA_STREAM, contentUri)
+                putExtra(Intent.EXTRA_SUBJECT, "Telefon Destek Excel Raporu - ${file.name}")
+                putExtra(
+                    Intent.EXTRA_TEXT,
+                    "Sayın İlgili,\n\nTelefon Destek sistemi üzerinden oluşturulan çağrı kayıtları Excel raporu ekte bilginize sunulmuştur.\n\nİyi çalışmalar dileriz."
+                )
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(Intent.createChooser(fallback, "Excel Raporunu E-Posta ile Gönder"))
         }
     }
 }
