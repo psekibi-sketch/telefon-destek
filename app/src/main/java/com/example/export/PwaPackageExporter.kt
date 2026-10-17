@@ -176,9 +176,10 @@ object PwaPackageExporter {
                 if (!existing || existing.length <= 2) {
                   localStorage.setItem('telefon_destek_records_v3', ${JSONObject.quote(recArr.toString())});
                 }
-                var st = JSON.parse(localStorage.getItem('telefon_destek_settings_v3') || '{}');
-                if (${JSONObject.quote(globalKullanici)}) st.globalAd = ${JSONObject.quote(globalKullanici)};
-                if (${JSONObject.quote(globalKullaniciKodu)}) st.globalKod = ${JSONObject.quote(globalKullaniciKodu)};
+                var stRaw = localStorage.getItem('telefon_destek_settings_v3');
+                var st = stRaw ? JSON.parse(stRaw) : {};
+                if (!st.globalAd && ${JSONObject.quote(globalKullanici)}) st.globalAd = ${JSONObject.quote(globalKullanici)};
+                if (!st.globalKod && ${JSONObject.quote(globalKullaniciKodu)}) st.globalKod = ${JSONObject.quote(globalKullaniciKodu)};
                 if (!st.sqlHost) st.sqlHost = '172.16.160.21';
                 if (!st.sqlPort) st.sqlPort = '8080';
                 localStorage.setItem('telefon_destek_settings_v3', JSON.stringify(st));

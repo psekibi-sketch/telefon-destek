@@ -203,8 +203,15 @@ const state = {
     sqlHost: '172.16.160.21',
     sqlPort: '8080',
     sqlType: 'MSSQL',
-    sqlDb: 'destek_db'
+    sqlDb: 'destek_db',
+    sqlUser: 'sa',
+    sqlPass: '',
+    _updatedAt: 0
   },
+  // Bağlantı ve SIP durumu varsayılan olarak ASLA yeşil (CONNECTED) olmaz!
+  // Sadece /api/test-db-connection başarılı yanıt döndüğünde 'CONNECTED' olur.
+  connectionStatus: 'DISCONNECTED', // 'DISCONNECTED' (Gri/Bekliyor) | 'TESTING' (Turuncu) | 'CONNECTED' (Yeşil/Bağlı) | 'ERROR' (Kırmızı/Çevrimdışı)
+  lastConnectionMessage: '',
   activeTab: 0,
   activeFormPage: 0,
   editingRecordId: null,
@@ -287,14 +294,118 @@ async function idbSet(key, val) {
   });
 }
 
-function saveToStorage(key, value) {
+const PROTECTED_USER_VAULT_CACHE = 'telefon-destek-user-vault-permanent';
+const PERMANENT_SETTING_ATOMS = [
+  'globalKod',
+  'globalAd',
+  'outlookEmail',
+  'masterPower',
+  'dutyMode',
+  'selectedPrefix',
+  'sipDomain',
+  'sipExt',
+  'sipPass',
+  'sipPort',
+  'sipAutoTimer',
+  'sipAutoSearch',
+  'sqlHost',
+  'sqlPort',
+  'sqlType',
+  'sqlDb',
+  'sqlUser',
+  'sqlPass'
+];
+
+async function vaultPut(key, val) {
+  if (!('caches' in window)) return;
   try {
-    const serialized = JSON.stringify(value);
+    const cache = await caches.open(PROTECTED_USER_VAULT_CACHE);
+    const resp = new Response(JSON.stringify(val), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    await cache.put(`/__user_vault__/${encodeURIComponent(key)}`, resp);
+  } catch (_) {}
+}
+
+async function vaultGet(key) {
+  if (!('caches' in window)) return null;
+  try {
+    const cache = await caches.open(PROTECTED_USER_VAULT_CACHE);
+    const resp = await cache.match(`/__user_vault__/${encodeURIComponent(key)}`);
+    if (!resp) return null;
+    return await resp.json();
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeAtomicSettingsBackup(settingsObj) {
+  if (!settingsObj || typeof settingsObj !== 'object') return;
+  try {
+    PERMANENT_SETTING_ATOMS.forEach((field) => {
+      if (settingsObj[field] !== undefined && settingsObj[field] !== null) {
+        localStorage.setItem(`td_perm_${field}`, JSON.stringify(settingsObj[field]));
+      }
+    });
+    localStorage.setItem('td_protected_settings_backup', JSON.stringify(settingsObj));
+  } catch (_) {}
+}
+
+function readAtomicSettingsBackup() {
+  const recovered = {};
+  let hasAny = false;
+  try {
+    const backupRaw = localStorage.getItem('td_protected_settings_backup');
+    if (backupRaw) {
+      const parsed = JSON.parse(backupRaw);
+      if (parsed && typeof parsed === 'object') {
+        Object.assign(recovered, parsed);
+        hasAny = true;
+      }
+    }
+    // Eski sürüm anahtarlarından da otomatik kurtarma (v1 / v2 / düz anahtarlar)
+    ['telefon_destek_settings_v2', 'telefon_destek_settings_v1', 'telefon_destek_settings'].forEach((legacyKey) => {
+      const raw = localStorage.getItem(legacyKey);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            Object.assign(recovered, parsed);
+            hasAny = true;
+          }
+        } catch (_) {}
+      }
+    });
+    PERMANENT_SETTING_ATOMS.forEach((field) => {
+      const atomRaw = localStorage.getItem(`td_perm_${field}`);
+      if (atomRaw !== null) {
+        try {
+          recovered[field] = JSON.parse(atomRaw);
+          hasAny = true;
+        } catch (_) {
+          recovered[field] = atomRaw;
+          hasAny = true;
+        }
+      }
+    });
+  } catch (_) {}
+  return hasAny ? recovered : null;
+}
+
+function saveToStorage(key, value) {
+  let valToSave = value;
+  if (key === STORAGE_KEYS.SETTINGS && valToSave && typeof valToSave === 'object') {
+    valToSave._updatedAt = Date.now();
+    writeAtomicSettingsBackup(valToSave);
+  }
+  try {
+    const serialized = JSON.stringify(valToSave);
     localStorage.setItem(key, serialized);
   } catch (e) {
     console.warn('localStorage yazma hatası:', e);
   }
-  idbSet(key, value);
+  idbSet(key, valToSave);
+  vaultPut(key, valToSave);
   updateStorageMetricsUI();
 }
 
@@ -306,23 +417,83 @@ async function loadFromStorageDual(key, fallback) {
   } catch (_) {}
 
   const idbVal = await idbGet(key);
+  const vaultVal = await vaultGet(key);
 
-  // Eğer birinde veri var diğerinde yoksa veya dizi uzunluğu daha fazlaysa en güncel/zengin olanı seç
+  // 1. DİZİLER (Çağrı Kayıtları, Kaçan Çağrılar, Şablonlar vb.):
+  // En çok kayda sahip olan veya boş olmayan katmanı seç, ayrıca eski sürüm kayıt anahtarlarını da birleştir
   if (Array.isArray(fallback)) {
     const a = Array.isArray(localVal) ? localVal : [];
     const b = Array.isArray(idbVal) ? idbVal : [];
-    const chosen = b.length > a.length ? b : (a.length > 0 ? a : fallback);
-    saveToStorage(key, chosen);
+    const c = Array.isArray(vaultVal) ? vaultVal : [];
+    let best = a;
+    if (b.length > best.length) best = b;
+    if (c.length > best.length) best = c;
+
+    if (key === STORAGE_KEYS.RECORDS && best.length === 0) {
+      // Eski versiyon kayıt anahtarlarını kontrol et
+      for (const oldKey of ['telefon_destek_records_v2', 'telefon_destek_records_v1', 'telefon_destek_records']) {
+        try {
+          const oldRaw = localStorage.getItem(oldKey);
+          if (oldRaw) {
+            const oldArr = JSON.parse(oldRaw);
+            if (Array.isArray(oldArr) && oldArr.length > best.length) {
+              best = oldArr;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    const chosen = best.length > 0 ? best : fallback;
+    try {
+      localStorage.setItem(key, JSON.stringify(chosen));
+    } catch (_) {}
+    idbSet(key, chosen);
+    vaultPut(key, chosen);
     return chosen;
   }
 
-  if (idbVal && typeof idbVal === 'object' && !Array.isArray(idbVal)) {
-    const merged = Object.assign({}, fallback, localVal || {}, idbVal || {});
-    saveToStorage(key, merged);
+  // 2. KULLANICI AYARLARI OBJESİ (SIP, Kullanıcı Adı, SQL Sunucu ve Şifreler):
+  // KESİN KORUMA: localStorage ve atomik yedekler her zaman varsayılan (fallback) değerlerin üzerindedir!
+  if (key === STORAGE_KEYS.SETTINGS || (fallback && typeof fallback === 'object' && !Array.isArray(fallback))) {
+    const atomicRecovered = key === STORAGE_KEYS.SETTINGS ? readAtomicSettingsBackup() : null;
+    const vObj = vaultVal && typeof vaultVal === 'object' && !Array.isArray(vaultVal) ? vaultVal : {};
+    const iObj = idbVal && typeof idbVal === 'object' && !Array.isArray(idbVal) ? idbVal : {};
+    const lObj = localVal && typeof localVal === 'object' && !Array.isArray(localVal) ? localVal : {};
+    const aObj = atomicRecovered && typeof atomicRecovered === 'object' ? atomicRecovered : {};
+
+    // Öncelik sırası: fallback (en düşük) -> vault -> idb -> atomic backup -> localStorage (en yüksek/güncel)
+    // Eğer idb veya vault'taki _updatedAt localStorage'dan daha yeniyse (örn. localStorage temizlenmişse) onu koru
+    const localTime = Number(lObj._updatedAt || aObj._updatedAt || 0);
+    const idbTime = Number(iObj._updatedAt || 0);
+    const vaultTime = Number(vObj._updatedAt || 0);
+
+    let merged;
+    if (Object.keys(lObj).length > 0 || Object.keys(aObj).length > 0) {
+      merged = Object.assign({}, fallback, vObj, iObj, aObj, lObj);
+      if (idbTime > localTime && localTime > 0) {
+        merged = Object.assign({}, fallback, vObj, aObj, lObj, iObj);
+      }
+      if (vaultTime > Math.max(localTime, idbTime) && localTime > 0) {
+        merged = Object.assign({}, fallback, iObj, aObj, lObj, vObj);
+      }
+    } else {
+      // localStorage boşsa (ör. tarayıcı önbelleği silindiyse) IndexedDB ve Vault'tan otomatik kurtar!
+      merged = Object.assign({}, fallback, vObj, iObj, aObj);
+    }
+
+    try {
+      localStorage.setItem(key, JSON.stringify(merged));
+    } catch (_) {}
+    if (key === STORAGE_KEYS.SETTINGS) {
+      writeAtomicSettingsBackup(merged);
+    }
+    idbSet(key, merged);
+    vaultPut(key, merged);
     return merged;
   }
 
-  const finalVal = localVal !== null ? localVal : (idbVal !== null ? idbVal : fallback);
+  const finalVal = localVal !== null ? localVal : idbVal !== null ? idbVal : vaultVal !== null ? vaultVal : fallback;
   saveToStorage(key, finalVal);
   return finalVal;
 }
@@ -336,7 +507,7 @@ async function requestPersistentStorage() {
 }
 
 /* ============================================================================
- * 2. UYGULAMA BAŞLATMA (INIT) & SERVICE WORKER KAYDI
+ * 2. UYGULAMA BAŞLATMA (INIT) & AKILLI SERVICE WORKER SÜRÜM KORUMASI
  * ============================================================================ */
 window.addEventListener('DOMContentLoaded', async () => {
   await requestPersistentStorage();
@@ -348,26 +519,145 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {});
-  }
+  if (!('serviceWorker' in navigator)) return;
+
+  // Service Worker'dan gelen yeni sürüm mesajlarını dinle:
+  // Eski önbellek temizlenirken localStorage ve kullanıcı ayarlarını yeniden mühürle!
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    const data = event.data || {};
+    if (data.type === 'SW_VERSION_UPDATED') {
+      // Tüm mevcut kullanıcı ayarlarını (SIP, Temsilci, SQL) ve kayıtları koruma altına al
+      writeAtomicSettingsBackup(state.settings);
+      saveAllState();
+      const prevVer = localStorage.getItem('td_installed_sw_version');
+      localStorage.setItem('td_installed_sw_version', data.version || '5.2.0');
+      if (prevVer && prevVer !== data.version) {
+        showToast(
+          `✨ Uygulama v${data.version} sürümüne güncellendi. SIP, kullanıcı ve offline kayıtlarınız korundu.`,
+          'info'
+        );
+      }
+    }
+  });
+
+  navigator.serviceWorker
+    .register('./sw.js', { scope: './', updateViaCache: 'none' })
+    .then((reg) => {
+      // GitHub Pages'te yeni sürüm olup olmadığını kontrol et
+      reg.update().catch(() => {});
+    })
+    .catch(() => {});
 }
 
 function setupNetworkStatusListeners() {
-  const updateOnlineBadge = () => {
-    const badge = document.getElementById('offlineStatusBadge');
-    if (!badge) return;
-    if (navigator.onLine) {
-      badge.textContent = '🟢 Online / Yerel Depo';
-      badge.className = 'badge badge-green';
-    } else {
-      badge.textContent = '⚡ Offline Mod (Yerel Kayıt)';
-      badge.className = 'badge badge-orange';
+  const onNetworkChange = () => {
+    if (!navigator.onLine) {
+      // İnternet/Wi-Fi tamamen koptuğunda bağlantı durumunu तुरंत Çevrimdışı (DISCONNECTED) yap
+      state.connectionStatus = 'DISCONNECTED';
     }
+    updateConnectionStatusUI();
   };
-  window.addEventListener('online', updateOnlineBadge);
-  window.addEventListener('offline', updateOnlineBadge);
-  updateOnlineBadge();
+  window.addEventListener('online', onNetworkChange);
+  window.addEventListener('offline', onNetworkChange);
+  updateConnectionStatusUI();
+}
+
+function updateConnectionStatusUI() {
+  const topBadge = document.getElementById('offlineStatusBadge');
+  const quickSipBtn = document.getElementById('quickSipBtn');
+  const sipDot = document.getElementById('sipStatusDot');
+  const sipTxt = document.getElementById('sipStatusText');
+  const sqlBadge = document.getElementById('sqlConnectionStateBadge');
+  const sipCardBadge = document.getElementById('sipConnectionStateBadge');
+  const modalBadge = document.getElementById('modalSqlConnectionBadge');
+
+  const ext = (state.settings.sipExt || '').trim();
+  const hostPort = `${state.settings.sqlHost || '172.16.160.21'}:${state.settings.sqlPort || '8080'}`;
+  const status = state.connectionStatus; // 'DISCONNECTED' | 'TESTING' | 'CONNECTED' | 'ERROR'
+
+  // KURAL 3: Asla varsayılan olarak yeşil yanmaz! Sadece /api/test-db-connection başarılı olduğunda ('CONNECTED') yeşil yanar.
+  if (status === 'CONNECTED') {
+    if (topBadge) {
+      topBadge.textContent = `🟢 Bağlı (${hostPort})`;
+      topBadge.className = 'badge badge-green';
+    }
+    if (quickSipBtn) quickSipBtn.className = 'qt-btn qt-sip-connected';
+    if (sipDot) sipDot.textContent = '🟢';
+    if (sipTxt) sipTxt.textContent = ext ? `SIP: ${ext} (Bağlı)` : 'SIP: Bağlı';
+    if (sqlBadge) {
+      sqlBadge.textContent = '🟢 Bağlı (Doğrulandı)';
+      sqlBadge.className = 'badge badge-green';
+    }
+    if (sipCardBadge) {
+      sipCardBadge.textContent = ext ? `🟢 Bağlı (Dahili ${ext})` : '🟢 Bağlı';
+      sipCardBadge.className = 'badge badge-green';
+    }
+    if (modalBadge) {
+      modalBadge.textContent = '🟢 Bağlı (/api/test-db-connection OK)';
+      modalBadge.className = 'badge badge-green';
+    }
+  } else if (status === 'TESTING') {
+    if (topBadge) {
+      topBadge.textContent = '⏳ Bağlantı Test Ediliyor...';
+      topBadge.className = 'badge badge-orange';
+    }
+    if (quickSipBtn) quickSipBtn.className = 'qt-btn qt-sip-testing';
+    if (sipDot) sipDot.textContent = '⏳';
+    if (sipTxt) sipTxt.textContent = 'Test Ediliyor...';
+    if (sqlBadge) {
+      sqlBadge.textContent = '⏳ Test Ediliyor...';
+      sqlBadge.className = 'badge badge-orange';
+    }
+    if (sipCardBadge) {
+      sipCardBadge.textContent = '⏳ Test Ediliyor...';
+      sipCardBadge.className = 'badge badge-orange';
+    }
+    if (modalBadge) {
+      modalBadge.textContent = '⏳ Test Ediliyor...';
+      modalBadge.className = 'badge badge-orange';
+    }
+  } else if (status === 'ERROR') {
+    if (topBadge) {
+      topBadge.textContent = '🔴 Çevrimdışı / Bağlantı Yok';
+      topBadge.className = 'badge badge-red';
+    }
+    if (quickSipBtn) quickSipBtn.className = 'qt-btn qt-sip-error';
+    if (sipDot) sipDot.textContent = '🔴';
+    if (sipTxt) sipTxt.textContent = ext ? `SIP: ${ext} (Yok)` : 'SIP: Bağlı Değil';
+    if (sqlBadge) {
+      sqlBadge.textContent = '🔴 Bağlantı Yok / Çevrimdışı';
+      sqlBadge.className = 'badge badge-red';
+    }
+    if (sipCardBadge) {
+      sipCardBadge.textContent = '🔴 Çevrimdışı / Bağlı Değil';
+      sipCardBadge.className = 'badge badge-red';
+    }
+    if (modalBadge) {
+      modalBadge.textContent = '🔴 Bağlantı Başarısız';
+      modalBadge.className = 'badge badge-red';
+    }
+  } else {
+    // Varsayılan durum ('DISCONNECTED'): Gri (Çevrimdışı / Bekliyor)
+    if (topBadge) {
+      topBadge.textContent = '⚪ Çevrimdışı / Bekliyor';
+      topBadge.className = 'badge badge-gray';
+    }
+    if (quickSipBtn) quickSipBtn.className = 'qt-btn qt-sip-disconnected';
+    if (sipDot) sipDot.textContent = '⚪';
+    if (sipTxt) sipTxt.textContent = ext ? `SIP: ${ext} (Bekliyor)` : 'SIP: Bekliyor';
+    if (sqlBadge) {
+      sqlBadge.textContent = '⚪ Çevrimdışı / Bekliyor';
+      sqlBadge.className = 'badge badge-gray';
+    }
+    if (sipCardBadge) {
+      sipCardBadge.textContent = '⚪ Çevrimdışı / Bekliyor';
+      sipCardBadge.className = 'badge badge-gray';
+    }
+    if (modalBadge) {
+      modalBadge.textContent = '⚪ Çevrimdışı / Bekliyor';
+      modalBadge.className = 'badge badge-gray';
+    }
+  }
 }
 
 async function loadAllApplicationData() {
@@ -515,11 +805,8 @@ function renderTopBarAndQuickToolbar() {
     sqlTxt.textContent = `SQL (${unsyncedCount})`;
   }
 
-  // Quick SIP Button
-  const sipTxt = document.getElementById('sipStatusText');
-  if (sipTxt) {
-    sipTxt.textContent = state.settings.sipExt ? `SIP: ${state.settings.sipExt}` : 'SIP Ayar';
-  }
+  // Gerçekçi SIP / API Bağlantı Durumu Göstergesini Güncelle
+  updateConnectionStatusUI();
 
   // Settings Unsynced Badge
   const setBadge = document.getElementById('settingsUnsyncedBadge');
@@ -768,25 +1055,44 @@ async function searchCustomerOnOfficeApi(fieldType, query) {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 2800);
-    const resp = await fetch(`${baseUrl}/api/search-customer`, {
+    const bodyObj = {
+      host: state.settings.sqlHost,
+      port: state.settings.sqlPort,
+      dbName: state.settings.sqlDb,
+      db_name: state.settings.sqlDb,
+      dbType: state.settings.sqlType,
+      db_type: state.settings.sqlType,
+      user: state.settings.sqlUser || '',
+      password: state.settings.sqlPass || '',
+      fieldType,
+      sicil_no: fieldType === 'SICIL' ? query : '',
+      telefon: fieldType === 'TELEFON' ? query : '',
+      gorusulen: fieldType === 'GORUSULEN' ? query : '',
+      query
+    };
+    let resp = await fetch(`${baseUrl}/api/search-customers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        host: state.settings.sqlHost,
-        port: state.settings.sqlPort,
-        dbName: state.settings.sqlDb,
-        dbType: state.settings.sqlType,
-        fieldType,
-        query
-      }),
+      body: JSON.stringify(bodyObj),
       signal: controller.signal
-    });
-    clearTimeout(timer);
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    if (data && data.found && Array.isArray(data.records)) {
-      return data.records;
+    }).catch(() => null);
+    if (!resp || !resp.ok) {
+      resp = await fetch(`${baseUrl}/api/search-customer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyObj),
+        signal: controller.signal
+      });
     }
+    clearTimeout(timer);
+    if (!resp || !resp.ok) return [];
+    const data = await resp.json();
+    const rawList = Array.isArray(data?.results)
+      ? data.results
+      : Array.isArray(data?.records)
+      ? data.records
+      : [];
+    return rawList.map(normalizeIncomingRecord);
   } catch (_) {}
   return [];
 }
@@ -1480,12 +1786,14 @@ function openWifiSyncModal() {
   if (document.getElementById('sqlFetchEnd') && !document.getElementById('sqlFetchEnd').value) {
     document.getElementById('sqlFetchEnd').value = todayIso;
   }
-  if (document.getElementById('modalSqlHost')) {
-    document.getElementById('modalSqlHost').value = state.settings.sqlHost || '172.16.160.21';
-  }
-  if (document.getElementById('modalSqlPort')) {
-    document.getElementById('modalSqlPort').value = state.settings.sqlPort || '8080';
-  }
+  const s = state.settings;
+  if (document.getElementById('modalSqlHost')) document.getElementById('modalSqlHost').value = s.sqlHost || '172.16.160.21';
+  if (document.getElementById('modalSqlPort')) document.getElementById('modalSqlPort').value = s.sqlPort || '8080';
+  if (document.getElementById('modalSqlType')) document.getElementById('modalSqlType').value = s.sqlType || 'MSSQL';
+  if (document.getElementById('modalSqlDb')) document.getElementById('modalSqlDb').value = s.sqlDb || 'destek_db';
+  if (document.getElementById('modalSqlUser')) document.getElementById('modalSqlUser').value = s.sqlUser || '';
+  if (document.getElementById('modalSqlPass')) document.getElementById('modalSqlPass').value = s.sqlPass || '';
+  updateConnectionStatusUI();
   openModal('wifiSyncModal');
 }
 
@@ -1506,101 +1814,193 @@ function updateWifiSyncModalStats() {
   if (elTotal) elTotal.textContent = String(total);
   if (elTarget) elTarget.textContent = hostPort;
   if (elPreview) elPreview.textContent = hostPort;
+  updateConnectionStatusUI();
 }
 
-function saveModalSqlHostPort() {
+function saveModalSqlHostPort(notify = true) {
   const host = (document.getElementById('modalSqlHost')?.value || '172.16.160.21').trim();
   const port = (document.getElementById('modalSqlPort')?.value || '8080').trim();
+  const type = document.getElementById('modalSqlType')?.value || state.settings.sqlType || 'MSSQL';
+  const db = (document.getElementById('modalSqlDb')?.value || state.settings.sqlDb || 'destek_db').trim();
+  const user = (document.getElementById('modalSqlUser')?.value ?? state.settings.sqlUser ?? '').trim();
+  const pass = document.getElementById('modalSqlPass')?.value ?? state.settings.sqlPass ?? '';
+
   state.settings.sqlHost = host;
   state.settings.sqlPort = port;
+  state.settings.sqlType = type;
+  state.settings.sqlDb = db;
+  state.settings.sqlUser = user;
+  state.settings.sqlPass = pass;
+
   saveToStorage(STORAGE_KEYS.SETTINGS, state.settings);
   syncSettingsInputsFromState();
   updateWifiSyncModalStats();
-  showToast(`✅ API Hedef Sunucu ${host}:${port} olarak güncellendi.`, 'success');
+  if (notify) {
+    showToast(`💾 API Sunucu (${host}:${port}) ve SQL Kullanıcı/Şifre ayarları kalıcı kaydedildi.`, 'success');
+  }
 }
 
 function mapRecordForSqlApi(r) {
+  const kod = r.kullaniciKodu || '';
+  const ad = r.kullanici || r.kullaniciAdi || '';
+  const bas = r.basTarihi || r.baslangicTarihi || '';
+  const bit = r.bitTarihi || r.bitisTarihi || '';
+  const arayan = r.arayan || r.arayanTuru || 'Müşteri';
+  const musteri = r.musteriBayi || r.musteriBayiAdi || '';
+  const gorusulen = r.gorusulen || r.gorusulenKisi || '';
+  const tel = r.telefon || '';
+  const tel2 = r.telefon2 || '';
+  const mail = r.mail || '';
+  const iletisim = r.iletisimTuru || 'Telefon';
+  const konu = r.destekKonu || r.destekKonusu1 || '';
+  const sicil = r.sicilNo || r.sicilNo1 || '';
+  const tespit = r.tespit || r.tespit1 || '';
+  const islem = r.islem || r.islem1 || '';
+  const bagId = r.bagId || r.baglantiId1 || '';
+  const sure = r.sure || r.toplamSure || '00:00';
+  const kasaVer = r.ynokcVersiyon || r.kasaVersiyon1 || '';
+  const arkaVer = r.arkaOfisVersiyon || r.arkaOfisVersiyon1 || '';
+  const redmine = r.redmine || r.redmineId1 || '';
+  const b2b = r.b2bKayit || '';
+  const bekleyen = r.bekleyen || r.bekleyenIs || 'Hayır';
+  const argeG = r.argeGidis || 'Hayır';
+  const argeD = r.argeDonus || 'Hayır';
+  const argeGN = r.argeGidisNotu || '';
+  const argeDN = r.argeDonusNotu || '';
+  const tckn = r.tckn || '';
+  const vergiNo = r.vergiNo || '';
+  const tespitKodu = r.tespitKodu || r.tespitKodu1 || '';
+  const islemKodu = r.islemKodu || r.islemKodu1 || '';
+  const yn500Sicil = r.yn500SicilNo || r.yn500SicilNo1 || sicil;
+  const dynVer = r.dynCashVersiyon || r.dynCashVersiyon1 || '';
+  const arkaId = r.arkaOfisId || r.arkaOfisId1 || '';
+  const yn500Ver = r.yn500Versiyon || r.yn500KasaVersiyon1 || '';
+  const servisKodu = r.servisKodu || r.not1 || '';
+
   return {
     ...r,
     id: r.id || Date.now(),
-    kullaniciKodu: r.kullaniciKodu || '',
-    kullaniciAdi: r.kullanici || r.kullaniciAdi || '',
-    baslangicTarihi: r.basTarihi || r.baslangicTarihi || '',
-    arayanTuru: r.arayan || r.arayanTuru || 'Müşteri',
-    musteriBayiAdi: r.musteriBayi || r.musteriBayiAdi || '',
-    gorusulenKisi: r.gorusulen || r.gorusulenKisi || '',
-    telefon: r.telefon || '',
-    telefon2: r.telefon2 || '',
-    mail: r.mail || '',
-    iletisimTuru: r.iletisimTuru || 'Telefon',
-    destekKonusu1: r.destekKonu || r.destekKonusu1 || '',
-    sicilNo1: r.sicilNo || r.sicilNo1 || '',
-    tespit1: r.tespit || r.tespit1 || '',
-    islem1: r.islem || r.islem1 || '',
-    baglantiId1: r.bagId || r.baglantiId1 || '',
-    bitisTarihi: r.bitTarihi || r.bitisTarihi || '',
-    toplamSure: r.sure || r.toplamSure || '00:00',
-    kasaVersiyon1: r.ynokcVersiyon || r.kasaVersiyon1 || '',
-    arkaOfisVersiyon1: r.arkaOfisVersiyon || r.arkaOfisVersiyon1 || '',
-    redmineId1: r.redmine || r.redmineId1 || '',
+    // SyncApiService.kt @Json UPPERCASE & snake_case alanları (100% birebir uyumlu)
+    KULLANICIKODU: kod,
+    KULLANICIADI: ad,
+    kullanici_kodu: kod,
+    kullanici_id: kod,
+    kullanici_adi: ad,
+    BASLANGICTARIHI: bas,
+    ARAYANTURU: arayan,
+    MUSTERIBAYIADI: musteri,
+    GORUSULENKISI: gorusulen,
+    TELEFON: tel,
+    TELEFON2: tel2,
+    MAIL: mail,
+    ILETISIMTURU: iletisim,
+    DESTEKKONUSU1: konu,
+    SICILNO1: sicil,
+    TESPIT1: tespit,
+    ISLEM1: islem,
+    BAGLANTIID1: bagId,
+    BITISTARIHI: bit,
+    TOPLAMSURE: sure,
+    KASAVERSIYON1: kasaVer,
+    ARKAOFISVERSIYON1: arkaVer,
+    REDMINEID1: redmine,
+    AKTIF: '1',
+    B2BKAYIT: b2b,
+    BEKLEYENIS: bekleyen,
+    ARGEGIDIS: argeG,
+    ARGEDONUS: argeD,
+    ARGEGIDISNOTU: argeGN,
+    ARGEDONUSNOTU: argeDN,
+    RESIM: '',
+    TCKN: tckn,
+    VERGINO: vergiNo,
+    TESPITKODU1: tespitKodu,
+    ISLEMKODU1: islemKodu,
+    YN500SICILNO1: yn500Sicil,
+    DYNCASHVERSIYON1: dynVer,
+    ARKAOFISID1: arkaId,
+    YN500KASAVERSIYON1: yn500Ver,
+    NOT1: servisKodu,
+    created_at: r.id || Date.now(),
+    // CamelCase karşılıkları
+    kullaniciKodu: kod,
+    kullaniciAdi: ad,
+    baslangicTarihi: bas,
+    arayanTuru: arayan,
+    musteriBayiAdi: musteri,
+    gorusulenKisi: gorusulen,
+    telefon: tel,
+    telefon2: tel2,
+    mail: mail,
+    iletisimTuru: iletisim,
+    destekKonusu1: konu,
+    sicilNo1: sicil,
+    tespit1: tespit,
+    islem1: islem,
+    baglantiId1: bagId,
+    bitisTarihi: bit,
+    toplamSure: sure,
+    kasaVersiyon1: kasaVer,
+    arkaOfisVersiyon1: arkaVer,
+    redmineId1: redmine,
     aktif: '1',
-    b2bKayit: r.b2bKayit || '',
-    bekleyenIs: r.bekleyen || r.bekleyenIs || 'Hayır',
-    argeGidis: r.argeGidis || 'Hayır',
-    argeDonus: r.argeDonus || 'Hayır',
-    argeGidisNotu: r.argeGidisNotu || '',
-    argeDonusNotu: r.argeDonusNotu || '',
-    tckn: r.tckn || '',
-    vergiNo: r.vergiNo || '',
-    tespitKodu1: r.tespitKodu || r.tespitKodu1 || '',
-    islemKodu1: r.islemKodu || r.islemKodu1 || '',
-    yn500SicilNo1: r.yn500SicilNo || r.yn500SicilNo1 || '',
-    dynCashVersiyon1: r.dynCashVersiyon || r.dynCashVersiyon1 || '',
-    arkaOfisId1: r.arkaOfisId || r.arkaOfisId1 || '',
-    yn500KasaVersiyon1: r.yn500Versiyon || r.yn500KasaVersiyon1 || '',
-    servisKodu: r.servisKodu || '',
-    not1: r.servisKodu || r.not1 || ''
+    b2bKayit: b2b,
+    bekleyenIs: bekleyen,
+    argeGidis: argeG,
+    argeDonus: argeD,
+    argeGidisNotu: argeGN,
+    argeDonusNotu: argeDN,
+    tckn,
+    vergiNo,
+    tespitKodu1: tespitKodu,
+    islemKodu1: islemKodu,
+    yn500SicilNo1: yn500Sicil,
+    dynCashVersiyon1: dynVer,
+    arkaOfisId1: arkaId,
+    yn500KasaVersiyon1: yn500Ver,
+    servisKodu,
+    not1: servisKodu
   };
 }
 
 function normalizeIncomingRecord(rem) {
   return {
     id: rem.id || Date.now() + Math.floor(Math.random() * 100000),
-    iletisimTuru: rem.iletisimTuru || 'Telefon',
-    sicilNo: rem.sicilNo || rem.sicilNo1 || '',
-    musteriBayi: rem.musteriBayi || rem.musteriBayiAdi || '',
-    gorusulen: rem.gorusulen || rem.gorusulenKisi || '',
-    basTarihi: rem.basTarihi || rem.baslangicTarihi || '',
-    bitTarihi: rem.bitTarihi || rem.bitisTarihi || '',
-    sure: rem.sure || rem.toplamSure || '00:00',
-    kullaniciKodu: rem.kullaniciKodu || '',
-    kullanici: rem.kullanici || rem.kullaniciAdi || '',
-    destekKonu: rem.destekKonu || rem.destekKonusu1 || '',
-    tespit: rem.tespit || rem.tespit1 || '',
-    islem: rem.islem || rem.islem1 || '',
-    redmine: rem.redmine || rem.redmineId1 || '',
-    bagId: rem.bagId || rem.baglantiId1 || '',
-    telefon: rem.telefon || '',
-    telefon2: rem.telefon2 || '',
-    mail: rem.mail || '',
-    bekleyen: rem.bekleyen || rem.bekleyenIs || 'Hayır',
-    argeGidis: rem.argeGidis || 'Hayır',
-    argeGidisNotu: rem.argeGidisNotu || '',
-    argeDonus: rem.argeDonus || 'Hayır',
-    argeDonusNotu: rem.argeDonusNotu || '',
-    b2bKayit: rem.b2bKayit || '',
-    arayan: rem.arayan || rem.arayanTuru || 'Müşteri',
-    ynokcVersiyon: rem.ynokcVersiyon || rem.kasaVersiyon1 || '',
-    dynCashVersiyon: rem.dynCashVersiyon || rem.dynCashVersiyon1 || '',
-    yn500Versiyon: rem.yn500Versiyon || rem.yn500KasaVersiyon1 || '',
-    arkaOfisVersiyon: rem.arkaOfisVersiyon || rem.arkaOfisVersiyon1 || '',
-    servisKodu: rem.servisKodu || rem.not1 || '',
-    yn500SicilNo: rem.yn500SicilNo || rem.yn500SicilNo1 || '',
-    arkaOfisId: rem.arkaOfisId || rem.arkaOfisId1 || '',
-    tckn: rem.tckn || '',
-    vergiNo: rem.vergiNo || '',
-    tespitKodu: rem.tespitKodu || rem.tespitKodu1 || '',
-    islemKodu: rem.islemKodu || rem.islemKodu1 || '',
+    iletisimTuru: rem.iletisimTuru || rem.ILETISIMTURU || 'Telefon',
+    sicilNo: rem.sicilNo || rem.sicilNo1 || rem.SICILNO1 || '',
+    musteriBayi: rem.musteriBayi || rem.musteriBayiAdi || rem.MUSTERIBAYIADI || '',
+    gorusulen: rem.gorusulen || rem.gorusulenKisi || rem.GORUSULENKISI || '',
+    basTarihi: rem.basTarihi || rem.baslangicTarihi || rem.BASLANGICTARIHI || '',
+    bitTarihi: rem.bitTarihi || rem.bitisTarihi || rem.BITISTARIHI || '',
+    sure: rem.sure || rem.toplamSure || rem.TOPLAMSURE || '00:00',
+    kullaniciKodu: rem.kullaniciKodu || rem.KULLANICIKODU || rem.kullanici_kodu || rem.kullanici_id || '',
+    kullanici: rem.kullanici || rem.kullaniciAdi || rem.KULLANICIADI || rem.kullanici_adi || '',
+    destekKonu: rem.destekKonu || rem.destekKonusu1 || rem.DESTEKKONUSU1 || '',
+    tespit: rem.tespit || rem.tespit1 || rem.TESPIT1 || '',
+    islem: rem.islem || rem.islem1 || rem.ISLEM1 || '',
+    redmine: rem.redmine || rem.redmineId1 || rem.REDMINEID1 || '',
+    bagId: rem.bagId || rem.baglantiId1 || rem.BAGLANTIID1 || '',
+    telefon: rem.telefon || rem.TELEFON || '',
+    telefon2: rem.telefon2 || rem.TELEFON2 || '',
+    mail: rem.mail || rem.MAIL || '',
+    bekleyen: rem.bekleyen || rem.bekleyenIs || rem.BEKLEYENIS || 'Hayır',
+    argeGidis: rem.argeGidis || rem.ARGEGIDIS || 'Hayır',
+    argeGidisNotu: rem.argeGidisNotu || rem.ARGEGIDISNOTU || '',
+    argeDonus: rem.argeDonus || rem.ARGEDONUS || 'Hayır',
+    argeDonusNotu: rem.argeDonusNotu || rem.ARGEDONUSNOTU || '',
+    b2bKayit: rem.b2bKayit || rem.B2BKAYIT || '',
+    arayan: rem.arayan || rem.arayanTuru || rem.ARAYANTURU || 'Müşteri',
+    ynokcVersiyon: rem.ynokcVersiyon || rem.kasaVersiyon1 || rem.KASAVERSIYON1 || '',
+    dynCashVersiyon: rem.dynCashVersiyon || rem.dynCashVersiyon1 || rem.DYNCASHVERSIYON1 || '',
+    yn500Versiyon: rem.yn500Versiyon || rem.yn500KasaVersiyon1 || rem.YN500KASAVERSIYON1 || '',
+    arkaOfisVersiyon: rem.arkaOfisVersiyon || rem.arkaOfisVersiyon1 || rem.ARKAOFISVERSIYON1 || '',
+    servisKodu: rem.servisKodu || rem.SERVISKODU || rem.not1 || rem.NOT1 || '',
+    yn500SicilNo: rem.yn500SicilNo || rem.yn500SicilNo1 || rem.YN500SICILNO1 || '',
+    arkaOfisId: rem.arkaOfisId || rem.arkaOfisId1 || rem.ARKAOFISID1 || '',
+    tckn: rem.tckn || rem.TCKN || '',
+    vergiNo: rem.vergiNo || rem.VERGINO || '',
+    tespitKodu: rem.tespitKodu || rem.tespitKodu1 || rem.TESPITKODU1 || '',
+    islemKodu: rem.islemKodu || rem.islemKodu1 || rem.ISLEMKODU1 || '',
     isSyncedToSql: rem.isSyncedToSql !== undefined ? Boolean(rem.isSyncedToSql) : Boolean(rem.isSynced)
   };
 }
@@ -1632,7 +2032,11 @@ async function syncOfflineRecordsToOfficeApi() {
       host: state.settings.sqlHost || '172.16.160.21',
       port: state.settings.sqlPort || '8080',
       dbName: state.settings.sqlDb || 'destek_db',
+      db_name: state.settings.sqlDb || 'destek_db',
       dbType: state.settings.sqlType || 'MSSQL',
+      db_type: state.settings.sqlType || 'MSSQL',
+      user: state.settings.sqlUser || '',
+      password: state.settings.sqlPass || '',
       records: unsyncedList.map(mapRecordForSqlApi)
     };
 
@@ -1659,6 +2063,9 @@ async function syncOfflineRecordsToOfficeApi() {
       throw new Error(resultData.message || 'Sunucu kayıtları reddetti.');
     }
 
+    // Başarılı aktarım sonrası bağlantı durumunu da bağlı yap
+    state.connectionStatus = 'CONNECTED';
+
     // Başarıyla gönderilen kayıtları isSyncedToSql = true olarak işaretle
     const unsyncedIds = new Set(unsyncedList.map((r) => r.id));
     state.records.forEach((r) => {
@@ -1672,6 +2079,8 @@ async function syncOfflineRecordsToOfficeApi() {
     if (statusBox) statusBox.textContent = msg;
     showToast(msg, 'success');
   } catch (err) {
+    state.connectionStatus = 'ERROR';
+    updateConnectionStatusUI();
     const errMsg = `⚠️ Ofis sunucusuna (${endpoint}) ulaşılamadı. Kayıtlarınız yerel hafızada güvende, ofis Wi-Fi ağına bağlandığınızda tekrar deneyin.`;
     if (statusBox) statusBox.textContent = errMsg;
     showToast(errMsg, 'error');
@@ -1731,26 +2140,40 @@ async function fetchCallsFromOfficeSql() {
         host: state.settings.sqlHost,
         port: state.settings.sqlPort,
         dbName: state.settings.sqlDb,
+        db_name: state.settings.sqlDb,
         dbType: state.settings.sqlType,
+        db_type: state.settings.sqlType,
+        user: state.settings.sqlUser || '',
+        password: state.settings.sqlPass || '',
         limit,
         startDate: fmtTR(startIso),
-        endDate: fmtTR(endIso)
+        endDate: fmtTR(endIso),
+        start_date: startIso,
+        end_date: endIso
       }),
       signal: controller.signal
     });
     clearTimeout(timeoutId);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
-    if (!data || !Array.isArray(data.records)) {
+    const incomingList = Array.isArray(data?.records)
+      ? data.records
+      : Array.isArray(data?.data)
+      ? data.data
+      : Array.isArray(data)
+      ? data
+      : null;
+    if (!incomingList) {
       throw new Error(data?.message || 'Geçersiz veri formatı');
     }
 
+    state.connectionStatus = 'CONNECTED';
     let added = 0;
     const existingKeys = new Set(
       state.records.map((r) => `${r.sicilNo}|${r.basTarihi}|${r.musteriBayi}`)
     );
 
-    data.records.forEach((rawRem) => {
+    incomingList.forEach((rawRem) => {
       const rem = normalizeIncomingRecord(rawRem);
       rem.isSyncedToSql = true;
       const key = `${rem.sicilNo || ''}|${rem.basTarihi || ''}|${rem.musteriBayi || ''}`;
@@ -1765,39 +2188,97 @@ async function fetchCallsFromOfficeSql() {
     saveToStorage(STORAGE_KEYS.RECORDS, state.records);
     renderAllUI();
     updateWifiSyncModalStats();
-    showToast(`✅ SQL Sunucudan ${data.records.length} kayıt okundu, ${added} yeni kayıt eklendi.`, 'success');
+    showToast(`✅ SQL Sunucudan ${incomingList.length} kayıt okundu, ${added} yeni kayıt eklendi.`, 'success');
   } catch (_) {
+    state.connectionStatus = 'ERROR';
+    updateConnectionStatusUI();
     showToast(`⚠️ SQL sunucusuna (${endpoint}) ulaşılamadı. Ofis Wi-Fi bağlantınızı kontrol edin.`, 'error');
   }
 }
 
+function renderSqlConnectionResultBoxes(isSuccess, message) {
+  ['sqlConnectionResultBox', 'modalSqlConnResultBox'].forEach((boxId) => {
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    if (!message) {
+      box.style.display = 'none';
+      return;
+    }
+    box.style.display = 'block';
+    box.style.background = isSuccess ? 'rgba(34, 197, 94, 0.16)' : 'rgba(239, 68, 68, 0.16)';
+    box.style.border = isSuccess ? '1px solid rgba(34, 197, 94, 0.45)' : '1px solid rgba(239, 68, 68, 0.45)';
+    box.style.color = isSuccess ? '#4ADE80' : '#F87171';
+    box.textContent = message;
+  });
+}
+
 async function testSqlConnection() {
-  saveSqlSettings(false);
+  // Eğer ayarlar sekmesindeki inputlar doluysa önce onları kaydet
+  if (document.getElementById('setSqlHost')) {
+    saveSqlSettings(false);
+  }
   const baseUrl = getOfficeApiBaseUrl();
-  const endpoint = `${baseUrl}/api/test-connection`;
+  const endpoint = `${baseUrl}/api/test-db-connection`;
+
+  state.connectionStatus = 'TESTING';
+  updateConnectionStatusUI();
+  renderSqlConnectionResultBoxes(false, `⏳ ${endpoint} adresine bağlantı testi yapılıyor...`);
   showToast(`🔍 ${endpoint} bağlantısı test ediliyor...`, 'info');
+
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const requestPayload = {
+      db_type: state.settings.sqlType || 'MSSQL',
+      dbType: state.settings.sqlType || 'MSSQL',
+      host: state.settings.sqlHost || '172.16.160.21',
+      port: state.settings.sqlPort || '8080',
+      db_name: state.settings.sqlDb || 'destek_db',
+      dbName: state.settings.sqlDb || 'destek_db',
+      user: state.settings.sqlUser || '',
+      username: state.settings.sqlUser || '',
+      password: state.settings.sqlPass || ''
+    };
+
     const resp = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        host: state.settings.sqlHost,
-        port: state.settings.sqlPort,
-        dbName: state.settings.sqlDb,
-        dbType: state.settings.sqlType
-      }),
+      body: JSON.stringify(requestPayload),
       signal: controller.signal
     });
     clearTimeout(timeoutId);
-    if (resp.ok) {
-      showToast(`✅ Ofis API Sunucusu (${baseUrl}) ile bağlantı başarılı!`, 'success');
+
+    let data = null;
+    try {
+      data = await resp.json();
+    } catch (_) {}
+
+    if (resp.ok && (!data || data.success !== false)) {
+      state.connectionStatus = 'CONNECTED';
+      updateConnectionStatusUI();
+      const okMsg = data?.message
+        ? `✓ Bağlantı Başarılı: ${data.message}`
+        : `✓ Ofis API & SQL Sunucusu (${baseUrl}) bağlantısı doğrulandı!`;
+      renderSqlConnectionResultBoxes(true, okMsg);
+      showToast(okMsg, 'success');
+      return true;
     } else {
-      showToast(`⚠️ Sunucu yanıt verdi ancak HTTP ${resp.status} döndü.`, 'error');
+      state.connectionStatus = 'ERROR';
+      updateConnectionStatusUI();
+      const failMsg = data?.message
+        ? `✗ Bağlantı Hatası: ${data.message}`
+        : `✗ Sunucu yanıt verdi ancak bağlantı doğrulanamadı (HTTP ${resp.status}).`;
+      renderSqlConnectionResultBoxes(false, failMsg);
+      showToast(failMsg, 'error');
+      return false;
     }
   } catch (_) {
-    showToast(`📡 Şu an Offline moddasınız veya ${baseUrl} yerel ağına bağlı değilsiniz. Veriler yerel hafızada saklanmaya devam ediyor.`, 'info');
+    state.connectionStatus = 'ERROR';
+    updateConnectionStatusUI();
+    const offlineMsg = `✗ Sunucuya (${endpoint}) ulaşılamadı. Şu an Çevrimdışı (Offline) moddasınız; tüm kayıtlar yerel hafızada güvenle saklanmaktadır.`;
+    renderSqlConnectionResultBoxes(false, offlineMsg);
+    showToast(offlineMsg, 'error');
+    return false;
   }
 }
 
@@ -2349,6 +2830,14 @@ function clearAllMissedCalls() {
 /* ============================================================================
  * 15. SEKME 3: KULLANICI TANIMLAMA, AYARLAR, YEDEKLEME & BELLEK YÖNETİMİ
  * ============================================================================ */
+function togglePasswordVisibility(inputId, btnEl) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  const isPass = inp.type === 'password';
+  inp.type = isPass ? 'text' : 'password';
+  if (btnEl) btnEl.textContent = isPass ? '🙈' : '👁️';
+}
+
 function syncSettingsInputsFromState() {
   const s = state.settings;
   const setVal = (id, v) => {
@@ -2359,6 +2848,15 @@ function syncSettingsInputsFromState() {
   setVal('setSqlPort', s.sqlPort || '8080');
   setVal('setSqlType', s.sqlType || 'MSSQL');
   setVal('setSqlDb', s.sqlDb || 'destek_db');
+  setVal('setSqlUser', s.sqlUser || '');
+  setVal('setSqlPass', s.sqlPass || '');
+
+  setVal('modalSqlHost', s.sqlHost || '172.16.160.21');
+  setVal('modalSqlPort', s.sqlPort || '8080');
+  setVal('modalSqlType', s.sqlType || 'MSSQL');
+  setVal('modalSqlDb', s.sqlDb || 'destek_db');
+  setVal('modalSqlUser', s.sqlUser || '');
+  setVal('modalSqlPass', s.sqlPass || '');
 
   setVal('setGlobalKod', s.globalKod || '');
   setVal('setGlobalAd', s.globalAd || '');
@@ -2382,9 +2880,12 @@ function saveSqlSettings(notify = true) {
   state.settings.sqlPort = (document.getElementById('setSqlPort')?.value || '8080').trim();
   state.settings.sqlType = document.getElementById('setSqlType')?.value || 'MSSQL';
   state.settings.sqlDb = (document.getElementById('setSqlDb')?.value || 'destek_db').trim();
+  state.settings.sqlUser = (document.getElementById('setSqlUser')?.value || '').trim();
+  state.settings.sqlPass = document.getElementById('setSqlPass')?.value || '';
   saveToStorage(STORAGE_KEYS.SETTINGS, state.settings);
+  syncSettingsInputsFromState();
   updateWifiSyncModalStats();
-  if (notify) showToast('💾 Ofis Wi-Fi Sync & SQL sunucu ayarları kalıcı olarak kaydedildi.', 'success');
+  if (notify) showToast('💾 Ofis Wi-Fi Sync & SQL (Kullanıcı/Şifre) ayarları kalıcı olarak kaydedildi.', 'success');
 }
 
 function saveGeneralSettings() {
@@ -2400,7 +2901,7 @@ function saveGeneralSettings() {
   showToast(`✅ Aktif temsilci "${state.settings.globalAd}" olarak kalıcı kaydedildi.`, 'success');
 }
 
-function saveSipSettings() {
+async function saveSipSettings() {
   state.settings.sipDomain = (document.getElementById('setSipDomain')?.value || '').trim();
   state.settings.sipExt = (document.getElementById('setSipExt')?.value || '').trim();
   state.settings.sipPass = document.getElementById('setSipPass')?.value || '';
@@ -2408,8 +2909,16 @@ function saveSipSettings() {
   state.settings.sipAutoTimer = Boolean(document.getElementById('setSipAutoTimer')?.checked);
   state.settings.sipAutoSearch = Boolean(document.getElementById('setSipAutoSearch')?.checked);
   saveToStorage(STORAGE_KEYS.SETTINGS, state.settings);
-  renderTopBarAndQuickToolbar();
-  showToast(`🔌 SIP Dahili (${state.settings.sipExt || '101'}) ayarları kalıcı olarak kaydedildi.`, 'success');
+  showToast(`💾 SIP Dahili (${state.settings.sipExt || '101'}) ayarları kalıcı kaydedildi. Sunucu bağlantısı kontrol ediliyor...`, 'info');
+  // Gerçekçi bağlantı kontrolü: Sadece /api/test-db-connection yanıt verirse yeşil olur!
+  await testSqlConnection();
+}
+
+function disconnectSipAndApiStatus() {
+  state.connectionStatus = 'DISCONNECTED';
+  updateConnectionStatusUI();
+  renderSqlConnectionResultBoxes(false, '');
+  showToast('📴 Bağlantı durumu Çevrimdışı / Bekliyor moduna alındı.', 'info');
 }
 
 function renderRepresentativePresets() {

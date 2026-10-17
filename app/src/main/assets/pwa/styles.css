@@ -237,7 +237,26 @@ html, body {
   background: linear-gradient(135deg, #1E40AF, #1E3A8A);
 }
 
-.qt-sip {
+.qt-sip,
+.qt-sip-disconnected {
+  background: #1E293B;
+  border: 1px solid #475569;
+  color: #CBD5E1;
+}
+
+.qt-sip-error {
+  background: #2C1418;
+  border: 1px solid #EF4444;
+  color: #F87171;
+}
+
+.qt-sip-testing {
+  background: #2E210F;
+  border: 1px solid #F59E0B;
+  color: #FBBF24;
+}
+
+.qt-sip-connected {
   background: #142E1F;
   border: 1px solid #22C55E;
   color: #4ADE80;
@@ -697,6 +716,7 @@ html, body {
 .badge-orange { background: rgba(245, 158, 11, 0.18); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.35); }
 .badge-red { background: rgba(239, 68, 68, 0.18); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.35); }
 .badge-purple { background: rgba(168, 85, 247, 0.18); color: #C084FC; border: 1px solid rgba(168, 85, 247, 0.35); }
+.badge-gray { background: rgba(100, 116, 139, 0.22); color: #CBD5E1; border: 1px solid rgba(148, 163, 184, 0.38); }
 
 /* KPI STRIP */
 .kpi-strip {
